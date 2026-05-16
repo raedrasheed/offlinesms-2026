@@ -1,0 +1,153 @@
+rules_version = '2';
+
+// OfflineSMS Firestore security rules.
+// Principles:
+//   - Only signed-in users can read/write anything.
+//   - Each user can only modify their own profile.
+//   - Chat docs and messages are restricted to chat members.
+//   - Group docs and messages are restricted to group members.
+//   - Senders cannot impersonate other users (senderId must match auth uid).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // --- users -------------------------------------------------------------
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if isSelf(uid);
+      allow update: if isSelf(uid);
+      allow delete: if false;
+    }
+
+    // --- chats (1:1) -------------------------------------------------------
+    match /chats/{chatId} {
+      function chatMembers() {
+        return resource.data.members;
+      }
+      function isMember() {
+        return signedIn() && request.auth.uid in chatMembers();
+      }
+      function willBeMember() {
+        return signedIn() && request.auth.uid in request.resource.data.members;
+      }
+
+      allow read: if isMember();
+      // Creator must include themselves and exactly 2 members for a 1:1 chat.
+      allow create:
+        if willBeMember()
+        && request.resource.data.members.size() == 2;
+      // Members can update last-message metadata and their own unread counter.
+      allow update: if isMember();
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function parentMembers() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+        }
+        function parentIsMember() {
+          return signedIn() && request.auth.uid in parentMembers();
+        }
+
+        allow read: if parentIsMember();
+
+        allow create:
+          if parentIsMember()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 4000;
+
+        // Only allow status/readBy updates by members; senderId/text immutable.
+        allow update:
+          if parentIsMember()
+          && request.resource.data.senderId == resource.data.senderId
+          && request.resource.data.text == resource.data.text;
+
+        allow delete:
+          if parentIsMember() && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // --- groups ------------------------------------------------------------
+    match /groups/{groupId} {
+      function members() {
+        return resource.data.members;
+      }
+      function admins() {
+        return resource.data.admins;
+      }
+      function isMember() {
+        return signedIn() && request.auth.uid in members();
+      }
+      function isAdmin() {
+        return signedIn() && request.auth.uid in admins();
+      }
+
+      allow read: if isMember();
+      allow create:
+        if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.auth.uid in request.resource.data.members
+        && request.auth.uid in request.resource.data.admins;
+      // Members can update metadata (last message). Membership/admin changes
+      // are only allowed by admins or for the user removing themselves.
+      allow update:
+        if isMember()
+        && (
+          isAdmin()
+          || (
+            request.resource.data.members.size() == members().size() - 1
+            && !(request.auth.uid in request.resource.data.members)
+          )
+          || (
+            // Non-admin metadata-only updates (last message, etc.)
+            request.resource.data.members == members()
+            && request.resource.data.admins == admins()
+          )
+        );
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        function parentMembers() {
+          return get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+        }
+        function parentIsMember() {
+          return signedIn() && request.auth.uid in parentMembers();
+        }
+
+        allow read: if parentIsMember();
+
+        allow create:
+          if parentIsMember()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 4000;
+
+        allow update:
+          if parentIsMember()
+          && request.resource.data.senderId == resource.data.senderId
+          && request.resource.data.text == resource.data.text;
+
+        allow delete:
+          if parentIsMember() && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // --- contacts (each user's personal address book) ---------------------
+    match /contacts/{uid}/list/{contactId} {
+      allow read, write: if isSelf(uid);
+    }
+
+    // --- notifications ----------------------------------------------------
+    match /notifications/{uid}/items/{notifId} {
+      allow read, write: if isSelf(uid);
+    }
+  }
+}

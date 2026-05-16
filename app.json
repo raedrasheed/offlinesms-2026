@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "OfflineSMS",
+    "slug": "offlinesms",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0AB3B8"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.offlinesms.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0AB3B8"
+      },
+      "package": "com.offlinesms.app",
+      "permissions": ["READ_CONTACTS", "RECEIVE_BOOT_COMPLETED", "VIBRATE"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-image-picker",
+      "expo-notifications",
+      "expo-localization"
+    ],
+    "extra": {
+      "firebase": {
+        "apiKey": "REPLACE_WITH_API_KEY",
+        "authDomain": "REPLACE.firebaseapp.com",
+        "projectId": "REPLACE",
+        "storageBucket": "REPLACE.appspot.com",
+        "messagingSenderId": "REPLACE",
+        "appId": "REPLACE"
+      }
+    }
+  }
+}
