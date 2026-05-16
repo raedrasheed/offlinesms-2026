@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -14,7 +14,7 @@ import Button from '@/components/Button';
 import Logo from '@/components/Logo';
 import { colors, spacing } from '@/theme';
 import { AuthStackParamList } from '@/navigation/types';
-import { PhoneAuthService } from '@/services/authService';
+import { WhatsAppAuthService } from '@/services/authService';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'PhoneLogin'>;
 
@@ -24,8 +24,6 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  // recaptcha ref is wired only in EAS/dev-build environments; placeholder for now.
-  const recaptchaRef = useRef<any>(null);
 
   const sanitizedPhone = `${countryCode}${phone.replace(/\D/g, '')}`;
 
@@ -37,10 +35,10 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
     }
     try {
       setLoading(true);
-      await PhoneAuthService.sendCode(sanitizedPhone, recaptchaRef.current);
+      await WhatsAppAuthService.sendCode(sanitizedPhone);
       navigation.navigate('OtpVerify', { phoneNumber: sanitizedPhone });
     } catch (e: any) {
-      setError(e?.message ?? 'Could not send verification code.');
+      setError(e?.message ?? 'Could not send WhatsApp code.');
     } finally {
       setLoading(false);
     }
@@ -58,9 +56,10 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
 
         <View style={styles.header}>
           <Logo size={64} />
-          <Text style={styles.title}>Enter your phone number</Text>
+          <Text style={styles.title}>Verify with WhatsApp</Text>
           <Text style={styles.subtitle}>
-            We'll send you an SMS with a verification code. Standard rates may apply.
+            Enter the phone number tied to your WhatsApp account. We'll send a 6-digit code to
+            that number on WhatsApp.
           </Text>
         </View>
 
@@ -82,7 +81,11 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
           />
         </View>
 
-        <Button title="Send code" fullWidth loading={loading} onPress={onSend} />
+        <Button title="Send WhatsApp code" fullWidth loading={loading} onPress={onSend} />
+
+        <Text style={styles.hint}>
+          Make sure WhatsApp is installed on this number. OfflineSMS does not send SMS codes.
+        </Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -98,8 +101,15 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.sm,
+    lineHeight: 20,
   },
   row: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.lg },
+  hint: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
 });
 
 export default PhoneLoginScreen;

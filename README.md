@@ -19,7 +19,7 @@ included.
 | Navigation     | React Navigation v6 (native-stack + tabs) |
 | State          | Local + React Context (auth)              |
 | Backend        | Firebase only (no custom server)          |
-| Auth           | Firebase Authentication (Phone + OTP)     |
+| Auth           | Firebase Auth + Custom Tokens, OTP via Meta WhatsApp Cloud API |
 | Database       | Cloud Firestore (realtime listeners)      |
 | Storage        | Firebase Storage (avatars, attachments)   |
 | Push           | Expo Notifications → FCM                  |
@@ -34,9 +34,13 @@ offlinesms-2026/
 ├─ App.tsx                       # Root component, providers, splash gate
 ├─ app.json                      # Expo config (brand, plugins, FB extras)
 ├─ babel.config.js               # @ alias + reanimated
-├─ firebase.json                 # CLI config for rules deploy
+├─ firebase.json                 # CLI config for rules + functions deploy
 ├─ firestore.rules               # Firestore security rules
 ├─ storage.rules                 # Storage security rules
+├─ functions/                    # Cloud Functions (WhatsApp OTP)
+│  ├─ src/index.ts               # requestWhatsAppOtp + verifyWhatsAppOtp
+│  ├─ package.json
+│  └─ tsconfig.json
 ├─ package.json
 ├─ tsconfig.json
 └─ src/
@@ -82,7 +86,7 @@ offlinesms-2026/
    │  └─ settings/
    │     └─ SettingsScreen.tsx
    ├─ services/
-   │  ├─ authService.ts          # Phone code send + confirm
+   │  ├─ authService.ts          # WhatsApp OTP send + verify (callable fns)
    │  ├─ chatService.ts          # 1:1 chats + messages + read state
    │  ├─ groupService.ts         # Groups + group messages
    │  ├─ notificationService.ts  # FCM/Expo token registration
@@ -112,21 +116,24 @@ mkdir -p assets
 # Drop in: icon.png, splash.png, adaptive-icon.png, favicon.png
 ```
 
-> Phone-number auth uses Firebase's native flow. On Expo Go it requires
-> `expo-firebase-recaptcha` for the reCAPTCHA challenge. For production use,
-> create an **EAS dev build** (`npx eas build --profile development`) and the
-> native flow takes over automatically.
+> OfflineSMS authenticates with **WhatsApp OTP only** — there is no SMS
+> fallback in the UI. The client never talks to WhatsApp directly; it calls
+> two Firebase callable Cloud Functions which talk to Meta's WhatsApp Cloud
+> API and return a Firebase Custom Token.
 
 ---
 
 ## 4. Firebase setup
 
 1. Go to the [Firebase console](https://console.firebase.google.com) and create
-   a project (e.g. `offlinesms-prod`).
+   a project (e.g. `offlinesms-prod`). Upgrade to the **Blaze plan** — Cloud
+   Functions require it.
 2. Enable products:
-   - **Authentication → Sign-in method → Phone**.
+   - **Authentication** — leave Phone sign-in **disabled**. We sign users in
+     with Custom Tokens minted by Cloud Functions after WhatsApp verification.
    - **Cloud Firestore** (start in production mode).
    - **Storage**.
+   - **Cloud Functions**.
    - **Cloud Messaging** (FCM).
 3. Register apps:
    - iOS bundle id: `com.offlinesms.app` → download `GoogleService-Info.plist`.
@@ -134,17 +141,61 @@ mkdir -p assets
 4. Copy the **web** Firebase config (`apiKey`, `authDomain`, `projectId`,
    `storageBucket`, `messagingSenderId`, `appId`) into `app.json` under
    `expo.extra.firebase`.
-5. Deploy rules:
+5. Install function deps and deploy rules + functions:
    ```bash
    npm i -g firebase-tools
    firebase login
-   firebase use --add        # pick your project
-   firebase deploy --only firestore:rules,storage:rules
+   firebase use --add                # pick your project
+   (cd functions && npm install)
+   firebase deploy --only firestore:rules,storage:rules,functions
    ```
 6. (Recommended) Add a composite index on `chats` for
    `members array-contains + lastMessageAt desc`, and on `groups` for
    `members array-contains + lastMessageAt desc`. Firestore will prompt you
    with a direct link the first time the queries run.
+
+### 4a. WhatsApp Cloud API setup (Meta)
+
+1. Open [Meta for Developers](https://developers.facebook.com), create an app
+   of type **Business**, and add the **WhatsApp** product.
+2. Under *WhatsApp → API Setup*:
+   - Note your **Phone number ID** (numeric).
+   - Generate a **permanent system-user access token** (Business Manager →
+     System Users → Add → assign the WhatsApp app → generate token with
+     `whatsapp_business_messaging` + `whatsapp_business_management` scopes).
+3. Create an **authentication message template** named `otp_login`:
+   - Category: **Authentication**.
+   - Language: `en_US` (or whatever you want as default).
+   - Body: `Your OfflineSMS verification code is {{1}}.`
+   - Button: *Copy code* → `{{1}}`.
+   - Submit for review and wait for approval.
+4. Store the credentials as Firebase Functions secrets:
+   ```bash
+   firebase functions:secrets:set WHATSAPP_PHONE_NUMBER_ID
+   firebase functions:secrets:set WHATSAPP_ACCESS_TOKEN
+   firebase functions:secrets:set WHATSAPP_TEMPLATE_NAME    # otp_login
+   firebase functions:secrets:set WHATSAPP_TEMPLATE_LANG    # en_US
+   firebase functions:secrets:set WHATSAPP_API_VERSION      # v20.0
+   firebase functions:secrets:set OTP_HASH_SECRET           # any long random string
+   ```
+5. Redeploy: `firebase deploy --only functions`.
+
+### 4b. Auth flow at runtime
+
+```
+PhoneLoginScreen      ──requestWhatsAppOtp(phone)──▶  Cloud Function
+                                                       │  generate 6-digit code
+                                                       │  store hash in otpRequests/
+                                                       │  POST to graph.facebook.com
+                                                       ▼
+                                                  WhatsApp delivers code
+OtpVerifyScreen       ──verifyWhatsAppOtp(phone,code)─▶ Cloud Function
+                                                       │  check hash, expiry, attempts
+                                                       │  auth.createUser or getUser
+                                                       │  mint custom token
+                                                       ▼
+                       ◀──{ token }──────────────────  signInWithCustomToken(token)
+```
 
 ---
 
@@ -198,6 +249,14 @@ groups/{groupId}
 
 contacts/{uid}/list/{contactId}      # personal address book (Phase 1.5)
 notifications/{uid}/items/{notifId}  # per-user inbox events
+
+otpRequests/{phoneNumber}            # SERVER-ONLY. Holds the SHA-256 hash of
+                                     # the active WhatsApp OTP, its expiry,
+                                     # and an attempt counter. Clients are
+                                     # denied by rules; only the admin SDK
+                                     # used in Cloud Functions can touch it.
+  ├─ codeHash, expiresAt, attempts
+  └─ lastSentAt, createdAt
 ```
 
 ---
@@ -278,10 +337,19 @@ core chat code.
 
 ## 10. Notes & caveats
 
-- Phone auth on the Firebase JS SDK requires a recaptcha verifier on web /
-  Expo Go. For native builds it's the standard SafetyNet/APNs flow — wire
-  it through `expo-firebase-recaptcha` or, for production polish, migrate to
-  `@react-native-firebase/auth` once you eject to a dev client.
+- **WhatsApp OTP** is implemented entirely through Cloud Functions calling
+  Meta's WhatsApp Cloud API. The OTP itself is never readable by the client:
+  only a salted SHA-256 hash is persisted in `otpRequests/{phoneNumber}`,
+  with attempt and resend rate limits enforced server-side. After
+  verification the function mints a Firebase Custom Token so the rest of the
+  app sees a normal Firebase user and the existing Firestore rules apply
+  unchanged.
+- **No SMS fallback ships in the UI.** If a user doesn't have WhatsApp on
+  their phone number they cannot sign in. To add SMS later, re-enable Phone
+  Auth in the Firebase console and add a "Use SMS instead" link on
+  `PhoneLoginScreen`.
+- The WhatsApp `otp_login` template must be approved by Meta before OTPs
+  will deliver. Approval usually takes <1 hour for authentication templates.
 - Push notifications register a device token via `expo-notifications`. To
   fan-out actual pushes, deploy a small Cloud Function that listens to new
   message writes and sends FCM payloads to the recipient's `fcmToken`.

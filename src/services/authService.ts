@@ -1,46 +1,42 @@
-import {
-  PhoneAuthProvider,
-  signInWithCredential,
-  ConfirmationResult,
-} from 'firebase/auth';
-import { auth } from '@/firebase/config';
+import { httpsCallable } from 'firebase/functions';
+import { signInWithCustomToken, UserCredential } from 'firebase/auth';
+import { auth, functions } from '@/firebase/config';
 
-// Web/Expo phone auth using Firebase JS SDK requires reCAPTCHA on web.
-// For React Native, in production prefer @react-native-firebase/auth which handles
-// phone auth natively. We expose a service abstraction so the implementation can be
-// swapped without changing the UI layer.
-export interface PhoneVerification {
-  verificationId: string;
+// OfflineSMS uses WhatsApp-only OTP. The flow is fully server-driven:
+//   - `requestCode` → Cloud Function generates a code and sends it via the
+//     Meta WhatsApp Cloud API.
+//   - `verifyCode`  → Cloud Function returns a Firebase Custom Token; the
+//     client exchanges it for an authenticated session.
+
+interface RequestResponse {
+  ok: boolean;
+  expiresInSeconds: number;
 }
 
-let currentVerification: PhoneVerification | null = null;
-let currentConfirmation: ConfirmationResult | null = null;
+interface VerifyResponse {
+  token: string;
+  uid: string;
+}
 
-export const PhoneAuthService = {
-  /**
-   * Start phone-number verification.
-   * `recaptchaVerifier` is required on web/Expo Go; on a custom dev build with
-   * native firebase you can pass `undefined`.
-   */
-  async sendCode(phoneNumber: string, recaptchaVerifier: any): Promise<void> {
-    const provider = new PhoneAuthProvider(auth);
-    const verificationId = await provider.verifyPhoneNumber(phoneNumber, recaptchaVerifier);
-    currentVerification = { verificationId };
+const requestFn = httpsCallable<{ phoneNumber: string }, RequestResponse>(
+  functions,
+  'requestWhatsAppOtp',
+);
+
+const verifyFn = httpsCallable<{ phoneNumber: string; code: string }, VerifyResponse>(
+  functions,
+  'verifyWhatsAppOtp',
+);
+
+export const WhatsAppAuthService = {
+  /** Send a 6-digit WhatsApp OTP to the given E.164 phone number. */
+  async sendCode(phoneNumber: string): Promise<void> {
+    await requestFn({ phoneNumber });
   },
 
-  async confirmCode(code: string) {
-    if (currentConfirmation) {
-      return currentConfirmation.confirm(code);
-    }
-    if (!currentVerification) {
-      throw new Error('No verification in progress. Request a code first.');
-    }
-    const credential = PhoneAuthProvider.credential(currentVerification.verificationId, code);
-    return signInWithCredential(auth, credential);
-  },
-
-  reset() {
-    currentVerification = null;
-    currentConfirmation = null;
+  /** Verify the OTP and sign the user into Firebase Auth. */
+  async confirmCode(phoneNumber: string, code: string): Promise<UserCredential> {
+    const { data } = await verifyFn({ phoneNumber, code });
+    return signInWithCustomToken(auth, data.token);
   },
 };

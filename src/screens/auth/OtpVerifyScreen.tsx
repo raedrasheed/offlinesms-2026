@@ -13,7 +13,7 @@ import Input from '@/components/Input';
 import Button from '@/components/Button';
 import { colors, spacing } from '@/theme';
 import { AuthStackParamList } from '@/navigation/types';
-import { PhoneAuthService } from '@/services/authService';
+import { WhatsAppAuthService } from '@/services/authService';
 import { UserService } from '@/services/userService';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'OtpVerify'>;
@@ -24,16 +24,17 @@ const OtpVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const onVerify = async () => {
     setError(null);
     if (code.length < 4) {
-      setError('Enter the code we sent you');
+      setError('Enter the code we sent on WhatsApp');
       return;
     }
     try {
       setLoading(true);
-      const cred = await PhoneAuthService.confirmCode(code);
+      const cred = await WhatsAppAuthService.confirmCode(phoneNumber, code);
       // Seed an empty user document so security rules let the user write later.
       if (cred?.user?.uid) {
         await UserService.createOrUpdateProfile(cred.user.uid, {
@@ -49,6 +50,18 @@ const OtpVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const onResend = async () => {
+    setError(null);
+    try {
+      setResending(true);
+      await WhatsAppAuthService.sendCode(phoneNumber);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not resend code.');
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
@@ -60,9 +73,10 @@ const OtpVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <Text style={styles.title}>Verify your number</Text>
+          <Text style={styles.title}>Check WhatsApp</Text>
           <Text style={styles.subtitle}>
-            Enter the 6-digit code sent to <Text style={styles.phone}>{phoneNumber}</Text>
+            We sent a 6-digit code to <Text style={styles.phone}>{phoneNumber}</Text> on WhatsApp.
+            It expires in 5 minutes.
           </Text>
         </View>
 
@@ -79,8 +93,10 @@ const OtpVerifyScreen: React.FC<Props> = ({ navigation, route }) => {
 
         <Button title="Verify" fullWidth loading={loading} onPress={onVerify} />
 
-        <TouchableOpacity style={{ marginTop: spacing.lg }}>
-          <Text style={styles.resend}>Resend code</Text>
+        <TouchableOpacity style={{ marginTop: spacing.lg }} onPress={onResend} disabled={resending}>
+          <Text style={styles.resend}>
+            {resending ? 'Resending…' : 'Resend code on WhatsApp'}
+          </Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -97,6 +113,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.sm,
+    lineHeight: 20,
   },
   phone: { color: colors.primary, fontWeight: '600' },
   resend: { color: colors.primary, fontWeight: '600', textAlign: 'center' },
