@@ -41,13 +41,13 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
         <Button
           title="Get Started"
           fullWidth
-          onPress={() => navigation.navigate('PhoneLogin')}
+          onPress={() => navigation.navigate('EmailAuth', { mode: 'signUp' })}
         />
         <Button
           title="I already have an account"
           variant="ghost"
           fullWidth
-          onPress={() => navigation.navigate('PhoneLogin')}
+          onPress={() => navigation.navigate('EmailAuth', { mode: 'signIn' })}
         />
         <Text style={styles.terms}>
           By continuing you agree to OfflineSMS Terms & Privacy Policy.
