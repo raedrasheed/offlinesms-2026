@@ -34,7 +34,12 @@ try {
   auth = getAuth(app);
 }
 
-const db: Firestore = getFirestore(app);
+// The Firestore database ID for this project. Firebase projects can host
+// multiple Firestore databases; `(default)` is the default name, but ours
+// was provisioned as `offlinesms-prod`.
+const FIRESTORE_DB_ID = 'offlinesms-prod';
+
+const db: Firestore = getFirestore(app, FIRESTORE_DB_ID);
 const storage: FirebaseStorage = getStorage(app);
 const functions: Functions = getFunctions(app, 'us-central1');
 
