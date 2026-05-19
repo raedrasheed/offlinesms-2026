@@ -17,6 +17,7 @@ import Avatar from '@/components/Avatar';
 import MessageBubble from '@/components/MessageBubble';
 import DateSeparator from '@/components/DateSeparator';
 import EmptyState from '@/components/EmptyState';
+import Wallpaper from '@/components/Wallpaper';
 import { colors, radius, spacing } from '@/theme';
 import { GroupService } from '@/services/groupService';
 import { UserService } from '@/services/userService';
@@ -134,33 +135,37 @@ const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : 0}
       >
-        {items.length === 0 ? (
-          <EmptyState title="No messages yet" message="Be the first to say hi to the group." />
-        ) : (
-          <FlatList
-            ref={listRef}
-            data={items}
-            keyExtractor={(it) => (it.kind === 'date' ? it.id : `m-${it.data.id}`)}
-            contentContainerStyle={{ paddingVertical: spacing.md }}
-            renderItem={({ item }) =>
-              item.kind === 'date' ? (
-                <DateSeparator label={item.label} />
-              ) : (
-                <MessageBubble
-                  text={item.data.text}
-                  outgoing={item.data.senderId === user?.uid}
-                  createdAt={item.data.createdAt}
-                  status={item.data.status}
-                  showSenderName={
-                    item.data.senderId !== user?.uid
-                      ? senders[item.data.senderId]?.displayName
-                      : undefined
-                  }
-                />
-              )
-            }
-          />
-        )}
+        <View style={{ flex: 1 }}>
+          <Wallpaper />
+          {items.length === 0 ? (
+            <EmptyState title="No messages yet" message="Be the first to say hi to the group." />
+          ) : (
+            <FlatList
+              ref={listRef}
+              data={items}
+              keyExtractor={(it) => (it.kind === 'date' ? it.id : `m-${it.data.id}`)}
+              contentContainerStyle={{ paddingVertical: spacing.md }}
+              renderItem={({ item }) =>
+                item.kind === 'date' ? (
+                  <DateSeparator label={item.label} />
+                ) : (
+                  <MessageBubble
+                    text={item.data.text}
+                    outgoing={item.data.senderId === user?.uid}
+                    createdAt={item.data.createdAt}
+                    status={item.data.status}
+                    showSenderName={
+                      item.data.senderId !== user?.uid
+                        ? senders[item.data.senderId]?.displayName
+                        : undefined
+                    }
+                    onDelete={() => GroupService.deleteGroupMessage(groupId, item.data.id).catch(() => {})}
+                  />
+                )
+              }
+            />
+          )}
+        </View>
         <View style={[styles.composer, { paddingBottom: spacing.sm + insets.bottom }]}>
           <View style={styles.inputPill}>
             <TouchableOpacity style={styles.pillIcon} hitSlop={6}>

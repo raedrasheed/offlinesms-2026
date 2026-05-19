@@ -121,6 +121,11 @@ export const ChatService = {
     batch.update(doc(db, Collections.chats, chatId), { [`unread.${uid}`]: 0 });
     await batch.commit();
   },
+
+  async deleteMessage(chatId: string, messageId: string) {
+    const { deleteDoc } = await import('firebase/firestore');
+    await deleteDoc(doc(db, Collections.chats, chatId, Collections.messages, messageId));
+  },
 };
 
 export const formatChatTime = (ts?: Timestamp | null): string => {

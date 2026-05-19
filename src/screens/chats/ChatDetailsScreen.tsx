@@ -8,20 +8,26 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ToastAndroid,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
 import Header from '@/components/Header';
 import Avatar from '@/components/Avatar';
 import MessageBubble from '@/components/MessageBubble';
 import DateSeparator from '@/components/DateSeparator';
 import EmptyState from '@/components/EmptyState';
+import Wallpaper from '@/components/Wallpaper';
 import { colors, radius, spacing } from '@/theme';
 import { ChatService } from '@/services/chatService';
 import { useAuth } from '@/hooks/useAuth';
-import { ChatMessage } from '@/types/models';
+import { ChatMessage, UserProfile } from '@/types/models';
 import { AppStackParamList } from '@/navigation/types';
+import { db } from '@/firebase/config';
+import { Collections } from '@/firebase/collections';
+import { formatLastSeen } from '@/utils/presence';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'ChatDetails'>;
 
@@ -50,9 +56,10 @@ const dayLabel = (ts?: Timestamp | null) => {
 
 const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const { chatId, title, photoURL } = route.params;
+  const { chatId, title, photoURL, otherUid } = route.params;
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [other, setOther] = useState<UserProfile | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<Item>>(null);
@@ -71,6 +78,14 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     });
     return unsub;
   }, [chatId, user]);
+
+  // Live subscription to the other participant's presence/profile.
+  useEffect(() => {
+    if (!otherUid) return;
+    return onSnapshot(doc(db, Collections.users, otherUid), (snap) => {
+      if (snap.exists()) setOther({ uid: otherUid, ...(snap.data() as any) });
+    });
+  }, [otherUid]);
 
   const items: Item[] = useMemo(() => {
     const out: Item[] = [];
@@ -106,17 +121,35 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  const onMicPress = () => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('Hold to record (coming soon)', ToastAndroid.SHORT);
+    } else {
+      Alert.alert('Voice messages', 'Hold to record (coming soon).');
+    }
+  };
+
+  const onDeleteMessage = (mid: string) => {
+    ChatService.deleteMessage(chatId, mid).catch(() => {});
+  };
+
   const hasDraft = draft.trim().length > 0;
+  const subtitle = other ? formatLastSeen(other.lastSeen) : '';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.chatBackground }}>
       <Header
         title={title}
-        subtitle="online"
+        subtitle={subtitle}
         leftIcon={
           <View style={styles.headerLeft}>
             <Text style={styles.backChevron}>‹</Text>
-            <Avatar uri={photoURL ?? undefined} name={title} size={36} />
+            <TouchableOpacity
+              onPress={() => otherUid && navigation.navigate('ContactProfile', { uid: otherUid })}
+              hitSlop={6}
+            >
+              <Avatar uri={photoURL ?? undefined} name={title} size={36} />
+            </TouchableOpacity>
           </View>
         }
         onLeftPress={() => navigation.goBack()}
@@ -125,7 +158,13 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
             <TouchableOpacity hitSlop={8} style={styles.iconBtn}>
               <Text style={styles.headerIcon}>📞</Text>
             </TouchableOpacity>
-            <TouchableOpacity hitSlop={8} style={styles.iconBtn}>
+            <TouchableOpacity
+              hitSlop={8}
+              style={styles.iconBtn}
+              onPress={() =>
+                otherUid && navigation.navigate('ContactProfile', { uid: otherUid })
+              }
+            >
               <Text style={styles.headerIcon}>⋮</Text>
             </TouchableOpacity>
           </View>
@@ -137,32 +176,36 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : 0}
       >
-        {items.length === 0 ? (
-          <EmptyState
-            title="Say hello"
-            message="This is the start of your conversation on OfflineSMS."
-          />
-        ) : (
-          <FlatList
-            ref={listRef}
-            data={items}
-            keyExtractor={(it) => (it.kind === 'date' ? it.id : `m-${it.data.id}`)}
-            contentContainerStyle={styles.listContent}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-            renderItem={({ item }) =>
-              item.kind === 'date' ? (
-                <DateSeparator label={item.label} />
-              ) : (
-                <MessageBubble
-                  text={item.data.text}
-                  outgoing={item.data.senderId === user?.uid}
-                  createdAt={item.data.createdAt}
-                  status={item.data.status}
-                />
-              )
-            }
-          />
-        )}
+        <View style={{ flex: 1 }}>
+          <Wallpaper />
+          {items.length === 0 ? (
+            <EmptyState
+              title="Say hello"
+              message="This is the start of your conversation on OfflineSMS."
+            />
+          ) : (
+            <FlatList
+              ref={listRef}
+              data={items}
+              keyExtractor={(it) => (it.kind === 'date' ? it.id : `m-${it.data.id}`)}
+              contentContainerStyle={styles.listContent}
+              onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+              renderItem={({ item }) =>
+                item.kind === 'date' ? (
+                  <DateSeparator label={item.label} />
+                ) : (
+                  <MessageBubble
+                    text={item.data.text}
+                    outgoing={item.data.senderId === user?.uid}
+                    createdAt={item.data.createdAt}
+                    status={item.data.status}
+                    onDelete={() => onDeleteMessage(item.data.id)}
+                  />
+                )
+              }
+            />
+          )}
+        </View>
 
         <View style={[styles.composer, { paddingBottom: spacing.sm + insets.bottom }]}>
           <View style={styles.inputPill}>
@@ -188,7 +231,7 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
           <TouchableOpacity
             style={styles.sendBtn}
-            onPress={hasDraft ? onSend : undefined}
+            onPress={hasDraft ? onSend : onMicPress}
             disabled={sending}
           >
             <Text style={styles.sendText}>{hasDraft ? '➤' : '🎤'}</Text>

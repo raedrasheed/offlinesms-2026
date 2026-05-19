@@ -110,4 +110,9 @@ export const GroupService = {
     const snap = await getDoc(doc(db, Collections.groups, groupId));
     return snap.exists() ? ({ id: groupId, ...(snap.data() as any) }) : null;
   },
+
+  async deleteGroupMessage(groupId: string, messageId: string) {
+    const { deleteDoc } = await import('firebase/firestore');
+    await deleteDoc(doc(db, Collections.groups, groupId, Collections.groupMessages, messageId));
+  },
 };

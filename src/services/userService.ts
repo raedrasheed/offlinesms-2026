@@ -36,6 +36,10 @@ export const UserService = {
     return snap.exists() ? ({ uid, ...(snap.data() as any) }) : null;
   },
 
+  async touchLastSeen(uid: string) {
+    await updateDoc(doc(db, Collections.users, uid), { lastSeen: serverTimestamp() });
+  },
+
   async findByPhone(phone: string): Promise<UserProfile | null> {
     const q = query(
       collection(db, Collections.users),

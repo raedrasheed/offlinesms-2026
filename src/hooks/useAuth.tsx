@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/firebase/config';
 import { Collections } from '@/firebase/collections';
 import { UserProfile } from '@/types/models';
+import { UserService } from '@/services/userService';
 
 interface AuthContextValue {
   user: User | null;
@@ -43,6 +45,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       () => setInitializing(false),
     );
     return unsub;
+  }, [user]);
+
+  // Presence heartbeat — touch lastSeen now, every 60s, and whenever the
+  // app returns to the foreground.
+  useEffect(() => {
+    if (!user) return;
+    const touch = () => UserService.touchLastSeen(user.uid).catch(() => {});
+    touch();
+    const interval = setInterval(touch, 60_000);
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') touch();
+    });
+    return () => {
+      clearInterval(interval);
+      sub.remove();
+    };
   }, [user]);
 
   const value = useMemo<AuthContextValue>(

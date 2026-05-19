@@ -6,6 +6,7 @@ import ChatDetailsScreen from '@/screens/chats/ChatDetailsScreen';
 import GroupChatScreen from '@/screens/groups/GroupChatScreen';
 import NewChatScreen from '@/screens/chats/NewChatScreen';
 import CreateGroupScreen from '@/screens/groups/CreateGroupScreen';
+import ContactProfileScreen from '@/screens/contacts/ContactProfileScreen';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -14,6 +15,7 @@ const AppStack: React.FC = () => (
     <Stack.Screen name="Tabs" component={MainTabs} />
     <Stack.Screen name="ChatDetails" component={ChatDetailsScreen} />
     <Stack.Screen name="GroupChat" component={GroupChatScreen} />
+    <Stack.Screen name="ContactProfile" component={ContactProfileScreen} />
     <Stack.Screen
       name="NewChat"
       component={NewChatScreen}

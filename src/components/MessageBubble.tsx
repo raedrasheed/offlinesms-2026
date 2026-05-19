@@ -1,5 +1,14 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import {
+  ActionSheetIOS,
+  Alert,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Timestamp } from 'firebase/firestore';
 import { colors, radius, spacing } from '@/theme';
 import { MessageStatus } from '@/types/models';
@@ -10,6 +19,7 @@ interface Props {
   createdAt?: Timestamp | null;
   status?: MessageStatus;
   showSenderName?: string;
+  onDelete?: () => void;
 }
 
 const formatTime = (ts?: Timestamp | null) =>
@@ -29,7 +39,42 @@ const MessageBubble: React.FC<Props> = ({
   createdAt,
   status,
   showSenderName,
+  onDelete,
 }) => {
+  const [pressed, setPressed] = useState(false);
+
+  const copy = async () => {
+    await Clipboard.setStringAsync(text);
+  };
+
+  const onLongPress = () => {
+    const canDelete = !!onDelete && outgoing;
+    const options = canDelete ? ['Copy', 'Delete', 'Cancel'] : ['Copy', 'Cancel'];
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          destructiveButtonIndex: canDelete ? 1 : undefined,
+          cancelButtonIndex: options.length - 1,
+        },
+        (index) => {
+          if (index === 0) copy();
+          if (canDelete && index === 1) onDelete?.();
+        },
+      );
+      return;
+    }
+
+    Alert.alert('Message', text.length > 80 ? text.slice(0, 77) + '…' : text, [
+      { text: 'Copy', onPress: copy },
+      ...(canDelete
+        ? [{ text: 'Delete', style: 'destructive' as const, onPress: onDelete }]
+        : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  };
+
   return (
     <View
       style={[
@@ -37,11 +82,16 @@ const MessageBubble: React.FC<Props> = ({
         { justifyContent: outgoing ? 'flex-end' : 'flex-start' },
       ]}
     >
-      <View
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={300}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
         style={[
           styles.bubble,
           outgoing ? styles.outgoing : styles.incoming,
           outgoing ? styles.outgoingTail : styles.incomingTail,
+          pressed && { opacity: 0.85 },
         ]}
       >
         {showSenderName && !outgoing && (
@@ -52,7 +102,7 @@ const MessageBubble: React.FC<Props> = ({
           <Text style={styles.time}>{formatTime(createdAt)}</Text>
           {outgoing && <StatusTicks status={status} />}
         </View>
-      </View>
+      </Pressable>
     </View>
   );
 };
@@ -68,12 +118,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: radius.bubble,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
   },
   outgoing: { backgroundColor: colors.bubbleOutgoing },
   incoming: {
     backgroundColor: colors.bubbleIncoming,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   outgoingTail: { borderBottomRightRadius: 4 },
   incomingTail: { borderBottomLeftRadius: 4 },
@@ -93,7 +146,7 @@ const styles = StyleSheet.create({
   },
   time: { fontSize: 10, color: colors.textMuted },
   tick: { fontSize: 11, color: colors.textMuted },
-  tickRead: { color: colors.info },
+  tickRead: { color: '#34B7F1' },
 });
 
 export default MessageBubble;

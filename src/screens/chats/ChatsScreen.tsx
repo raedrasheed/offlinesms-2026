@@ -97,6 +97,7 @@ const ChatsScreen: React.FC<Props> = () => {
                     chatId: item.id,
                     title: other?.displayName ?? 'Chat',
                     photoURL: other?.photoURL ?? null,
+                    otherUid: otherId,
                   })
                 }
               />

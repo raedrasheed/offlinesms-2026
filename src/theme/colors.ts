@@ -9,10 +9,10 @@ export const colors = {
   surface: '#F6F8FA',
   surfaceAlt: '#ECEFF1',
 
-  // Outgoing bubbles use a soft tint of the brand color; incoming stays white.
-  bubbleOutgoing: '#DCEFF6',
+  // Outgoing bubbles use a soft cream; incoming stays white.
+  bubbleOutgoing: '#F5EAD6',
   bubbleIncoming: '#FFFFFF',
-  chatBackground: '#ECE5DD',
+  chatBackground: '#EFE7DD',
 
   textPrimary: '#0F1720',
   textSecondary: '#5B6770',

@@ -122,6 +122,7 @@ const ContactsScreen: React.FC<Props> = () => {
       chatId,
       title: contact.appUser.displayName || contact.name,
       photoURL: contact.appUser.photoURL ?? null,
+      otherUid: contact.appUser.uid,
     });
   };
 

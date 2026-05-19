@@ -15,10 +15,11 @@ export type MainTabParamList = {
 
 export type AppStackParamList = {
   Tabs: NavigatorScreenParams<MainTabParamList>;
-  ChatDetails: { chatId: string; title: string; photoURL?: string | null };
+  ChatDetails: { chatId: string; title: string; photoURL?: string | null; otherUid?: string };
   GroupChat: { groupId: string; title: string; photoURL?: string | null };
   NewChat: undefined;
   CreateGroup: undefined;
+  ContactProfile: { uid: string };
 };
 
 export type RootStackParamList = {

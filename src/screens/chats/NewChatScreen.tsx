@@ -41,6 +41,7 @@ const NewChatScreen: React.FC<Props> = ({ navigation }) => {
       chatId,
       title: other.displayName,
       photoURL: other.photoURL ?? null,
+      otherUid: other.uid,
     });
   };
 
