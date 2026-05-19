@@ -47,7 +47,7 @@ const ProfileSetupScreen: React.FC = () => {
   const uploadPhoto = async (uid: string, uri: string): Promise<string> => {
     const res = await fetch(uri);
     const blob = await res.blob();
-    const ref = storageRef(storage, `avatars/${uid}.jpg`);
+    const ref = storageRef(storage, `avatars/${uid}/profile.jpg`);
     await uploadBytes(ref, blob, { contentType: 'image/jpeg' });
     return getDownloadURL(ref);
   };
