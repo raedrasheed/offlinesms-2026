@@ -49,10 +49,20 @@ export const UserService = {
   },
 
   async listAllUsers(currentUid: string): Promise<UserProfile[]> {
-    const q = query(collection(db, Collections.users), orderBy('displayName'));
-    const snap = await getDocs(q);
+    const snap = await getDocs(collection(db, Collections.users));
     return snap.docs
       .map((d) => ({ uid: d.id, ...(d.data() as any) }) as UserProfile)
-      .filter((u) => u.uid !== currentUid);
+      .filter((u) => u.uid !== currentUid)
+      .sort((a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? ''));
   },
+};
+
+/** Strip all non-digit characters and keep only the last 9 digits — used to
+ * fuzzy-match phone numbers across formats (with/without country codes,
+ * spaces, dashes, etc.). Good enough for matching device contacts to
+ * Firestore users. */
+export const normalizePhoneTail = (raw?: string | null): string => {
+  if (!raw) return '';
+  const digits = String(raw).replace(/\D/g, '');
+  return digits.slice(-9);
 };

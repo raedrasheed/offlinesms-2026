@@ -42,15 +42,25 @@ export const ChatService = {
   },
 
   listenToUserChats(uid: string, cb: (chats: Chat[]) => void): Unsubscribe {
-    const q = query(
-      collection(db, Collections.chats),
-      where('members', 'array-contains', uid),
-      orderBy('lastMessageAt', 'desc'),
+    // No orderBy so Firestore doesn't require a composite index;
+    // sort client-side after the snapshot arrives.
+    const q = query(collection(db, Collections.chats), where('members', 'array-contains', uid));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const chats: Chat[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        chats.sort((a, b) => {
+          const at = a.lastMessageAt?.toMillis?.() ?? 0;
+          const bt = b.lastMessageAt?.toMillis?.() ?? 0;
+          return bt - at;
+        });
+        cb(chats);
+      },
+      (err) => {
+        console.warn('listenToUserChats error', err);
+        cb([]);
+      },
     );
-    return onSnapshot(q, (snap) => {
-      const chats: Chat[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      cb(chats);
-    });
   },
 
   listenToMessages(chatId: string, cb: (msgs: ChatMessage[]) => void): Unsubscribe {

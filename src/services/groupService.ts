@@ -39,15 +39,23 @@ export const GroupService = {
   },
 
   listenToUserGroups(uid: string, cb: (groups: Group[]) => void): Unsubscribe {
-    const q = query(
-      collection(db, Collections.groups),
-      where('members', 'array-contains', uid),
-      orderBy('lastMessageAt', 'desc'),
+    const q = query(collection(db, Collections.groups), where('members', 'array-contains', uid));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const groups: Group[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        groups.sort((a, b) => {
+          const at = a.lastMessageAt?.toMillis?.() ?? 0;
+          const bt = b.lastMessageAt?.toMillis?.() ?? 0;
+          return bt - at;
+        });
+        cb(groups);
+      },
+      (err) => {
+        console.warn('listenToUserGroups error', err);
+        cb([]);
+      },
     );
-    return onSnapshot(q, (snap) => {
-      const groups: Group[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      cb(groups);
-    });
   },
 
   listenToGroupMessages(groupId: string, cb: (msgs: ChatMessage[]) => void): Unsubscribe {

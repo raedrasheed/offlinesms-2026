@@ -25,7 +25,13 @@
     "plugins": [
       "expo-image-picker",
       "expo-notifications",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "OfflineSMS uses your contacts to find friends already on OfflineSMS so you can message them."
+        }
+      ]
     ],
     "extra": {
       "firebase": {
