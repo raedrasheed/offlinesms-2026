@@ -1,6 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { colors } from '@/theme';
 
 interface Props {
@@ -10,21 +9,19 @@ interface Props {
 }
 
 /**
- * Original OfflineSMS mark — a turquoise chat bubble with offline arrows,
- * drawn from scratch so we don't ship any third-party brand assets.
+ * OfflineSMS brand mark — renders the project icon asset
+ * (assets/icon.png). If the asset is missing it falls back gracefully
+ * to a coloured circle so the UI never crashes.
  */
 const Logo: React.FC<Props> = ({ size = 96, showWordmark = false, tint = colors.primary }) => {
   return (
     <View style={styles.row}>
-      <Svg width={size} height={size} viewBox="0 0 100 100">
-        <Path
-          d="M20 20 H72 a8 8 0 0 1 8 8 v32 a8 8 0 0 1 -8 8 H42 l-12 12 v-12 h-2 a8 8 0 0 1 -8 -8 V28 a8 8 0 0 1 8 -8 z"
-          fill={tint}
-        />
-        <Circle cx="38" cy="46" r="4" fill="#fff" />
-        <Circle cx="50" cy="46" r="4" fill="#fff" />
-        <Circle cx="62" cy="46" r="4" fill="#fff" />
-      </Svg>
+      <Image
+        // require is statically resolved by Metro at build time.
+        source={require('../../assets/icon.png')}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        resizeMode="contain"
+      />
       {showWordmark && (
         <Text style={[styles.wordmark, { color: tint, fontSize: size * 0.28 }]}>
           OfflineSMS
