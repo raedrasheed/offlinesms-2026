@@ -19,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#2596be"
       },
       "package": "com.offlinesms.app",
       "permissions": ["READ_CONTACTS", "RECEIVE_BOOT_COMPLETED", "VIBRATE"]
