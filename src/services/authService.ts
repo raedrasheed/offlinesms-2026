@@ -1,42 +1,44 @@
-import { httpsCallable } from 'firebase/functions';
-import { signInWithCustomToken, UserCredential } from 'firebase/auth';
-import { auth, functions } from '@/firebase/config';
+import {
+  PhoneAuthProvider,
+  signInWithCredential,
+  UserCredential,
+} from 'firebase/auth';
+import { auth } from '@/firebase/config';
 
-// OfflineSMS uses WhatsApp-only OTP. The flow is fully server-driven:
-//   - `requestCode` → Cloud Function generates a code and sends it via the
-//     Meta WhatsApp Cloud API.
-//   - `verifyCode`  → Cloud Function returns a Firebase Custom Token; the
-//     client exchanges it for an authenticated session.
+// OfflineSMS uses Firebase Phone Auth (SMS-based OTP) for sign-in.
+// Phone auth on the JS SDK requires a reCAPTCHA verifier on every request;
+// the verifier ref is rendered in PhoneLoginScreen via
+// `FirebaseRecaptchaVerifierModal` from expo-firebase-recaptcha.
+//
+// Flow:
+//   PhoneLoginScreen → sendCode(phone, recaptchaVerifier)
+//                      → PhoneAuthProvider.verifyPhoneNumber()
+//                      → SMS delivered by Firebase
+//   OtpVerifyScreen  → confirmCode(code)
+//                      → PhoneAuthProvider.credential() → signInWithCredential()
 
-interface RequestResponse {
-  ok: boolean;
-  expiresInSeconds: number;
-}
+let verificationId: string | null = null;
 
-interface VerifyResponse {
-  token: string;
-  uid: string;
-}
-
-const requestFn = httpsCallable<{ phoneNumber: string }, RequestResponse>(
-  functions,
-  'requestWhatsAppOtp',
-);
-
-const verifyFn = httpsCallable<{ phoneNumber: string; code: string }, VerifyResponse>(
-  functions,
-  'verifyWhatsAppOtp',
-);
-
-export const WhatsAppAuthService = {
-  /** Send a 6-digit WhatsApp OTP to the given E.164 phone number. */
-  async sendCode(phoneNumber: string): Promise<void> {
-    await requestFn({ phoneNumber });
+export const PhoneAuthService = {
+  /** Send an SMS verification code to the given E.164 phone number. */
+  async sendCode(phoneNumber: string, recaptchaVerifier: any): Promise<void> {
+    if (!recaptchaVerifier) {
+      throw new Error('Recaptcha verifier not ready. Please try again in a moment.');
+    }
+    const provider = new PhoneAuthProvider(auth);
+    verificationId = await provider.verifyPhoneNumber(phoneNumber, recaptchaVerifier);
   },
 
-  /** Verify the OTP and sign the user into Firebase Auth. */
-  async confirmCode(phoneNumber: string, code: string): Promise<UserCredential> {
-    const { data } = await verifyFn({ phoneNumber, code });
-    return signInWithCustomToken(auth, data.token);
+  /** Confirm the SMS code and sign the user into Firebase Auth. */
+  async confirmCode(code: string): Promise<UserCredential> {
+    if (!verificationId) {
+      throw new Error('No verification in progress. Request a code first.');
+    }
+    const credential = PhoneAuthProvider.credential(verificationId, code);
+    return signInWithCredential(auth, credential);
+  },
+
+  reset() {
+    verificationId = null;
   },
 };

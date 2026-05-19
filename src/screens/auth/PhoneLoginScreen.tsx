@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Constants from 'expo-constants';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Input from '@/components/Input';
@@ -14,7 +16,7 @@ import Button from '@/components/Button';
 import Logo from '@/components/Logo';
 import { colors, spacing } from '@/theme';
 import { AuthStackParamList } from '@/navigation/types';
-import { WhatsAppAuthService } from '@/services/authService';
+import { PhoneAuthService } from '@/services/authService';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'PhoneLogin'>;
 
@@ -24,6 +26,7 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const recaptchaRef = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   const sanitizedPhone = `${countryCode}${phone.replace(/\D/g, '')}`;
 
@@ -35,10 +38,10 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
     }
     try {
       setLoading(true);
-      await WhatsAppAuthService.sendCode(sanitizedPhone);
+      await PhoneAuthService.sendCode(sanitizedPhone, recaptchaRef.current);
       navigation.navigate('OtpVerify', { phoneNumber: sanitizedPhone });
     } catch (e: any) {
-      setError(e?.message ?? 'Could not send WhatsApp code.');
+      setError(e?.message ?? 'Could not send verification code.');
     } finally {
       setLoading(false);
     }
@@ -49,6 +52,12 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
       style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaRef}
+        firebaseConfig={(Constants.expoConfig?.extra as any)?.firebase}
+        attemptInvisibleVerification
+      />
+
       <View style={[styles.wrapper, { paddingTop: insets.top + 24 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={10}>
           <Text style={styles.back}>‹  Back</Text>
@@ -56,10 +65,9 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
 
         <View style={styles.header}>
           <Logo size={64} />
-          <Text style={styles.title}>Verify with WhatsApp</Text>
+          <Text style={styles.title}>Enter your phone number</Text>
           <Text style={styles.subtitle}>
-            Enter the phone number tied to your WhatsApp account. We'll send a 6-digit code to
-            that number on WhatsApp.
+            We'll send you an SMS with a 6-digit verification code. Standard rates may apply.
           </Text>
         </View>
 
@@ -81,10 +89,10 @@ const PhoneLoginScreen: React.FC<Props> = ({ navigation }) => {
           />
         </View>
 
-        <Button title="Send WhatsApp code" fullWidth loading={loading} onPress={onSend} />
+        <Button title="Send code" fullWidth loading={loading} onPress={onSend} />
 
         <Text style={styles.hint}>
-          Make sure WhatsApp is installed on this number. OfflineSMS does not send SMS codes.
+          A reCAPTCHA challenge may briefly appear to confirm you are not a robot.
         </Text>
       </View>
     </KeyboardAvoidingView>
