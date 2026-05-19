@@ -34,12 +34,12 @@
     ],
     "extra": {
       "firebase": {
-        "apiKey": "REPLACE_WITH_API_KEY",
-        "authDomain": "REPLACE.firebaseapp.com",
-        "projectId": "REPLACE",
-        "storageBucket": "REPLACE.appspot.com",
-        "messagingSenderId": "REPLACE",
-        "appId": "REPLACE"
+        "apiKey": "AIzaSyDm15bRZOoTpqTRXkbivEuJke3pRYbRNrQ",
+        "authDomain": "offlinesms-prod-2026.firebaseapp.com",
+        "projectId": "offlinesms-prod-2026",
+        "storageBucket": "offlinesms-prod-2026.firebasestorage.app",
+        "messagingSenderId": "224454037992",
+        "appId": "1:224454037992:web:c0d016ac1d5c12bb07d45d"
       }
     }
   }
