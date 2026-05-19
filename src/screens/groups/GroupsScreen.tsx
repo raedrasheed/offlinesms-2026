@@ -41,7 +41,16 @@ const GroupsScreen: React.FC<Props> = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <Header title="OfflineSMS" subtitle="Groups" />
+      <Header
+        title="OfflineSMS"
+        subtitle="Groups"
+        rightAccessory={
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <Text style={styles.headerIcon}>🔍</Text>
+            <Text style={styles.headerIcon}>⋮</Text>
+          </View>
+        }
+      />
       <SearchBar value={search} onChangeText={setSearch} placeholder="Search groups" />
       {filtered.length === 0 ? (
         <EmptyState
@@ -94,6 +103,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fabIcon: { color: '#fff', fontSize: 28, fontWeight: '700', marginTop: -2 },
+  headerIcon: { color: '#fff', fontSize: 18, paddingHorizontal: 4 },
 });
 
 export default GroupsScreen;

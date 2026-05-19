@@ -1,17 +1,18 @@
-// OfflineSMS brand palette — primary turquoise/blue inspired by offlinesms.com
+// OfflineSMS brand palette — primary steel-blue #2596be
 export const colors = {
-  primary: '#0AB3B8',
-  primaryDark: '#078A8E',
-  primaryLight: '#3FD2D6',
+  primary: '#2596be',
+  primaryDark: '#1d7596',
+  primaryLight: '#5fbdde',
   accent: '#00C2A8',
 
   background: '#FFFFFF',
   surface: '#F6F8FA',
   surfaceAlt: '#ECEFF1',
 
-  bubbleOutgoing: '#D8F5F6',
+  // Outgoing bubbles use a soft tint of the brand color; incoming stays white.
+  bubbleOutgoing: '#DCEFF6',
   bubbleIncoming: '#FFFFFF',
-  chatBackground: '#E9EEF1',
+  chatBackground: '#ECE5DD',
 
   textPrimary: '#0F1720',
   textSecondary: '#5B6770',
@@ -26,9 +27,12 @@ export const colors = {
   danger: '#EF4444',
   info: '#3B82F6',
 
-  unreadBadge: '#0AB3B8',
+  unreadBadge: '#2596be',
   online: '#22C55E',
   overlay: 'rgba(0,0,0,0.45)',
+
+  // Date separator pill in the chat thread.
+  datePill: 'rgba(255,255,255,0.92)',
 } as const;
 
 export type ColorKey = keyof typeof colors;

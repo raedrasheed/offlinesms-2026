@@ -60,7 +60,16 @@ const ChatsScreen: React.FC<Props> = () => {
 
   return (
     <View style={styles.container}>
-      <Header title="OfflineSMS" subtitle="Chats" />
+      <Header
+        title="OfflineSMS"
+        subtitle="Chats"
+        rightAccessory={
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <Text style={styles.headerIcon}>🔍</Text>
+            <Text style={styles.headerIcon}>⋮</Text>
+          </View>
+        }
+      />
       <SearchBar value={searchTerm} onChangeText={setSearchTerm} placeholder="Search chats" />
 
       {filtered.length === 0 ? (
@@ -121,6 +130,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fabIcon: { color: '#fff', fontSize: 28, fontWeight: '700', marginTop: -2 },
+  headerIcon: { color: '#fff', fontSize: 18, paddingHorizontal: 4 },
 });
 
 export default ChatsScreen;
