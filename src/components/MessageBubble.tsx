@@ -15,6 +15,7 @@ import { Timestamp } from 'firebase/firestore';
 import { useRef } from 'react';
 import ReplyPreviewBar from './ReplyPreviewBar';
 import ReactionStrip, { DEFAULT_REACTIONS, ReactionAnchor } from './ReactionStrip';
+import ReactionChips from './ReactionChips';
 import { colors, radius, spacing } from '@/theme';
 import { MessageStatus, ReplyPreview } from '@/types/models';
 
@@ -25,12 +26,16 @@ interface Props {
   status?: MessageStatus;
   showSenderName?: string;
   replyTo?: ReplyPreview | null;
-  /** Emoji the current viewer has reacted with, if any. Highlighted in
-   *  the reaction strip so it reads as a toggle target. */
-  myReaction?: string | null;
+  /** Aggregated reactions map. The viewer's own reaction is highlighted
+   *  in both the chips below the bubble and the long-press strip. */
+  reactions?: Record<string, string[]>;
+  /** The viewing user's uid — needed to know which chip to highlight
+   *  and which emoji is pre-selected in the strip. */
+  viewerUid?: string;
   onDelete?: () => void;
   onReply?: () => void;
-  /** Called when the viewer picks an emoji from the long-press strip. */
+  /** Called when the viewer picks an emoji from the long-press strip
+   *  OR taps an existing reaction chip below the bubble. */
   onReact?: (emoji: string) => void;
 }
 
@@ -53,6 +58,17 @@ const ReplyHint: React.FC = () => (
   </View>
 );
 
+const findMyReaction = (
+  reactions: Record<string, string[]> | undefined,
+  viewerUid: string | undefined,
+): string | null => {
+  if (!reactions || !viewerUid) return null;
+  for (const [emoji, uids] of Object.entries(reactions)) {
+    if (uids?.includes(viewerUid)) return emoji;
+  }
+  return null;
+};
+
 const MessageBubble: React.FC<Props> = ({
   text,
   outgoing,
@@ -60,7 +76,8 @@ const MessageBubble: React.FC<Props> = ({
   status,
   showSenderName,
   replyTo,
-  myReaction,
+  reactions,
+  viewerUid,
   onDelete,
   onReply,
   onReact,
@@ -68,6 +85,7 @@ const MessageBubble: React.FC<Props> = ({
   const [pressed, setPressed] = useState(false);
   const [stripAnchor, setStripAnchor] = useState<ReactionAnchor | null>(null);
   const swipeRef = useRef<Swipeable>(null);
+  const myReaction = findMyReaction(reactions, viewerUid);
 
   const copy = async () => {
     await Clipboard.setStringAsync(text);
@@ -157,21 +175,35 @@ const MessageBubble: React.FC<Props> = ({
         { justifyContent: outgoing ? 'flex-end' : 'flex-start' },
       ]}
     >
-      {onReply ? (
-        <Swipeable
-          ref={swipeRef}
-          renderLeftActions={() => <ReplyHint />}
-          onSwipeableOpen={handleSwipeOpen}
-          leftThreshold={48}
-          friction={2}
-          overshootLeft={false}
-          containerStyle={styles.swipeable}
-        >
-          {bubbleContent}
-        </Swipeable>
-      ) : (
-        bubbleContent
-      )}
+      <View
+        style={[
+          styles.column,
+          { alignItems: outgoing ? 'flex-end' : 'flex-start' },
+        ]}
+      >
+        {onReply ? (
+          <Swipeable
+            ref={swipeRef}
+            renderLeftActions={() => <ReplyHint />}
+            onSwipeableOpen={handleSwipeOpen}
+            leftThreshold={48}
+            friction={2}
+            overshootLeft={false}
+            containerStyle={styles.swipeable}
+          >
+            {bubbleContent}
+          </Swipeable>
+        ) : (
+          bubbleContent
+        )}
+
+        <ReactionChips
+          reactions={reactions}
+          viewerUid={viewerUid}
+          alignRight={outgoing}
+          onPress={(emoji) => onReact?.(emoji)}
+        />
+      </View>
 
       <ReactionStrip
         visible={!!stripAnchor}
@@ -192,6 +224,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginVertical: 3,
     flexDirection: 'row',
+  },
+  column: {
+    flexShrink: 1,
+    maxWidth: '85%',
   },
   swipeable: { flexShrink: 1 },
   bubble: {

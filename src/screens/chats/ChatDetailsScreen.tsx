@@ -79,16 +79,6 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     return 'OfflineSMS user';
   };
 
-  /** Returns the emoji the current viewer has reacted with on a message,
-   *  or null if none. */
-  const myReactionFor = (m: ChatMessage): string | null => {
-    if (!user || !m.reactions) return null;
-    for (const [emoji, uids] of Object.entries(m.reactions)) {
-      if (uids.includes(user.uid)) return emoji;
-    }
-    return null;
-  };
-
   useEffect(() => {
     const unsub = ChatService.listenToMessages(chatId, (msgs) => {
       setMessages(msgs);
@@ -237,7 +227,8 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
                     createdAt={item.data.createdAt}
                     status={item.data.status}
                     replyTo={item.data.replyTo}
-                    myReaction={myReactionFor(item.data)}
+                    reactions={item.data.reactions}
+                    viewerUid={user?.uid}
                     onDelete={() => onDeleteMessage(item.data.id)}
                     onReply={() =>
                       setReplyTo(buildReplyPreview(item.data, senderNameFor(item.data)))
