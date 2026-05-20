@@ -94,3 +94,43 @@ Manual smoke run (UI):
 
 If anything in this list fails, raise it in chat with the step number;
 a failing item points directly at a rule or a service call.
+
+## UI verification — pin / mute / archive + online dot
+
+These cover the wire-up landed in `94bc39b` and `895144c`.
+
+### Pin / mute / archive (chat list rows)
+
+| # | Step | Expected |
+| - | ---- | -------- |
+| U1 | Long-press a row in the Chats tab | Native action sheet shows: Pin, Mute notifications, Archive, Cancel |
+| U2 | Tap **Pin** | The row floats to the top of the active list; a small pin glyph appears in the row's right column under the timestamp |
+| U3 | Long-press the same row → **Unpin** | The pin glyph disappears; row returns to recency order |
+| U4 | Tap **Mute notifications** | A small mute glyph appears beside the contact name; if the chat has any unread count, the badge color desaturates to gray |
+| U5 | Tap **Archive** | The row disappears from the active list; an "Archived (N) ›" banner appears at the top |
+| U6 | Tap the **Archived (N) ›** banner | Banner expands inline below itself, showing the archived chats. Tap again to collapse |
+| U7 | Long-press an archived chat → **Unarchive** | Row leaves the archived section and reappears among active chats |
+| U8 | Send a new message into an archived chat (via the chat detail screen) | The chat is automatically removed from archive (per `ChatService.sendMessage` resetting `archivedBy: []`) |
+| U9 | From device B, attempt to flip A's pin/mute/archive flag via the Firestore console (e.g., write `pinnedBy: [B.uid]` into A's chat doc) | **Rejected** by `listDiffOnlyTouchesSelf` rule |
+
+### Online dot + presence subtitle
+
+Run with two test accounts on two devices (A on emulator, B on a real phone or second emulator).
+
+| # | Step | Expected |
+| -- | ---- | -------- |
+| U10 | A signs in, B signs in. Both keep the app foregrounded. | Each device's `users/{uid}.lastSeen` heartbeat refreshes every 60s + on resume |
+| U11 | On A, open the Chats tab → find B's chat | B's avatar shows a small **green dot** in the bottom-right corner |
+| U12 | Send `useAuth` heartbeat: background A for >2 min, leave B foregrounded | A's chat list dot for B remains green; if you switch perspective, B sees A's dot disappear after 2 min |
+| U13 | Open the chat → header subtitle | Reads **"online"** while peer is fresh, then **"last seen Xm ago"** after the threshold |
+| U14 | Tap the header avatar | Navigates to ContactProfile; the profile screen also shows the live `lastSeen` |
+| U15 | Sign out from B's device | B's `lastSeen` stops updating; after 2 min A's dot for B disappears and subtitle reflects the timestamp |
+| U16 | New peer with no `lastSeen` field (e.g., a brand-new email signup not yet heart-beat) | Avatar shows no dot; chat header subtitle is empty (neutral fallback, never fakes "online") |
+
+## TypeScript / build check
+
+```powershell
+npx tsc --noEmit
+```
+
+Expected: zero errors. The hooks (`useChats`, `useMessages`, `usePresence`, `useTypingOthers`, `useTypingIndicator`, `useChatActions`) and the `Icons` module all expose typed surfaces consumed by `ChatsScreen`, `ChatListItem`, `ChatDetailsScreen`, and `Avatar`.
