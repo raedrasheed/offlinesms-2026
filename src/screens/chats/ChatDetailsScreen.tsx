@@ -24,6 +24,9 @@ import { colors, radius, spacing } from '@/theme';
 import { ChatService } from '@/services/chatService';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresence } from '@/hooks/usePresence';
+import { useTypingOthers } from '@/hooks/useTypingOthers';
+import { useTypingIndicator } from '@/hooks/useTypingIndicator';
+import { PresenceService } from '@/services/presenceService';
 import { ChatMessage } from '@/types/models';
 import { AppStackParamList } from '@/navigation/types';
 import { formatLastSeen, isOnline } from '@/utils/presence';
@@ -59,6 +62,9 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const other = usePresence(otherUid);
+  const typingUids = useTypingOthers(chatId, user?.uid);
+  const isPeerTyping = !!otherUid && typingUids.includes(otherUid);
+  const { notify: notifyTyping } = useTypingIndicator(chatId, user?.uid);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<Item>>(null);
@@ -104,12 +110,20 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     try {
       setSending(true);
       setDraft('');
+      // Clear our typing state immediately so the peer's "typing…" label
+      // doesn't linger past the message arrival.
+      PresenceService.setTyping(chatId, user.uid, false).catch(() => {});
       await ChatService.sendMessage(chatId, user.uid, text);
     } catch {
       setDraft(text);
     } finally {
       setSending(false);
     }
+  };
+
+  const onDraftChange = (text: string) => {
+    setDraft(text);
+    if (text.length > 0) notifyTyping();
   };
 
   const onMicPress = () => {
@@ -125,7 +139,11 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const hasDraft = draft.trim().length > 0;
-  const subtitle = other ? formatLastSeen(other.lastSeen) : '';
+  const subtitle = isPeerTyping
+    ? 'typing…'
+    : other
+    ? formatLastSeen(other.lastSeen)
+    : '';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.chatBackground }}>
@@ -211,7 +229,7 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
             <TextInput
               style={styles.input}
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={onDraftChange}
               placeholder="Message"
               placeholderTextColor={colors.textMuted}
               multiline
