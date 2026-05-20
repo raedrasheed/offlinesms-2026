@@ -151,6 +151,23 @@ Two-device test (A and B). Use the same setup as the presence checks.
 | U27 | Receive a reply from peer B on device A. | A's incoming bubble shows the inline reply card. Both your own outgoing and the peer's incoming bubbles render the same inline quoted layout. |
 | U28 | Try to overwrite `replyTo` on an existing message via the Firestore console (e.g. set it to a different object). | **Rejected** by the message-update rule which makes `replyTo` immutable post-create. |
 
+### Message reactions
+
+Run with two accounts A and B in the same 1:1 chat, then repeat for a group containing A, B and C.
+
+| # | Step | Expected |
+| -- | ---- | -------- |
+| U29 | A long-presses any bubble | A floating pill appears above the touch point with 👍 ❤️ 😂 😮 😢 🙏 + a "•••" overflow. Tapping the backdrop dismisses without a write. |
+| U30 | A taps 👍 on B's incoming message | A `reactions.👍` array containing `[A.uid]` appears on the message; a chip showing 👍 (no count, since just one user) renders left-aligned under the bubble (incoming). |
+| U31 | A taps 👍 on their own outgoing message | Chip appears right-aligned under the outgoing bubble. Confirms both incoming and outgoing surfaces work. |
+| U32 | A long-presses the same message again | Strip opens with 👍 visually highlighted (primarySoft background) to indicate the current reaction. |
+| U33 | A taps ❤️ in the strip | One atomic Firestore update strips `[A.uid]` from `reactions.👍` and adds it to `reactions.❤️`. The chip switches from 👍 to ❤️ without ever showing both. |
+| U34 | A taps the existing ❤️ chip under the bubble | The reaction is removed (`reactions.❤️` → empty). The chip disappears. |
+| U35 | B reacts ❤️ to the same message A reacts ❤️ to | The chip aggregates to `❤️ 2`. A's chip remains highlighted (primaryDark count), B's matches. |
+| U36 | A long-presses → taps **•••** | The previously documented Reply / Copy / Delete action sheet appears. Reactions and actions are reachable from the same long-press entry. |
+| U37 | Group chat (A, B, C). A reacts 😂, B reacts 😂, C reacts ❤️. | Two chips render: `😂 2` and `❤️` — sorted by count descending. C's `❤️` chip is highlighted on C's screen only. |
+| U38 | Close the chat, reopen | All chips and highlight state restore exactly from Firestore — no client-side cache drift. |
+
 ## TypeScript / build check
 
 ```powershell

@@ -22,6 +22,7 @@ import { colors, radius, spacing } from '@/theme';
 import { GroupService } from '@/services/groupService';
 import { UserService } from '@/services/userService';
 import { useAuth } from '@/hooks/useAuth';
+import { useChatActions } from '@/hooks/useChatActions';
 import { ChatMessage, UserProfile } from '@/types/models';
 import { AppStackParamList } from '@/navigation/types';
 
@@ -54,6 +55,7 @@ const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { groupId, title, photoURL } = route.params;
   const { user } = useAuth();
+  const actions = useChatActions();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -160,7 +162,12 @@ const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
                         : undefined
                     }
                     replyTo={item.data.replyTo}
+                    reactions={item.data.reactions}
+                    viewerUid={user?.uid}
                     onDelete={() => GroupService.deleteGroupMessage(groupId, item.data.id).catch(() => {})}
+                    onReact={(emoji) =>
+                      actions.react(groupId, item.data.id, emoji, true).catch(() => {})
+                    }
                   />
                 )
               }
