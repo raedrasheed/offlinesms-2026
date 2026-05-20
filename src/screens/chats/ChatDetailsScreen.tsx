@@ -20,14 +20,15 @@ import MessageBubble from '@/components/MessageBubble';
 import DateSeparator from '@/components/DateSeparator';
 import EmptyState from '@/components/EmptyState';
 import Wallpaper from '@/components/Wallpaper';
+import ReplyPreviewBar from '@/components/ReplyPreviewBar';
 import { colors, radius, spacing } from '@/theme';
-import { ChatService } from '@/services/chatService';
+import { ChatService, buildReplyPreview } from '@/services/chatService';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresence } from '@/hooks/usePresence';
 import { useTypingOthers } from '@/hooks/useTypingOthers';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { PresenceService } from '@/services/presenceService';
-import { ChatMessage } from '@/types/models';
+import { ChatMessage, ReplyPreview } from '@/types/models';
 import { AppStackParamList } from '@/navigation/types';
 import { formatLastSeen, isOnline } from '@/utils/presence';
 
@@ -59,7 +60,7 @@ const dayLabel = (ts?: Timestamp | null) => {
 const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { chatId, title, photoURL, otherUid } = route.params;
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const other = usePresence(otherUid);
   const typingUids = useTypingOthers(chatId, user?.uid);
@@ -67,7 +68,14 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { notify: notifyTyping } = useTypingIndicator(chatId, user?.uid);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [replyTo, setReplyTo] = useState<ReplyPreview | null>(null);
   const listRef = useRef<FlatList<Item>>(null);
+
+  const senderNameFor = (m: ChatMessage): string => {
+    if (m.senderId === user?.uid) return profile?.displayName?.trim() || 'You';
+    if (m.senderId === otherUid) return other?.displayName?.trim() || title || 'Contact';
+    return 'OfflineSMS user';
+  };
 
   useEffect(() => {
     const unsub = ChatService.listenToMessages(chatId, (msgs) => {
@@ -107,15 +115,18 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const onSend = async () => {
     const text = draft.trim();
     if (!text || !user || sending) return;
+    const pendingReply = replyTo;
     try {
       setSending(true);
       setDraft('');
+      setReplyTo(null);
       // Clear our typing state immediately so the peer's "typing…" label
       // doesn't linger past the message arrival.
       PresenceService.setTyping(chatId, user.uid, false).catch(() => {});
-      await ChatService.sendMessage(chatId, user.uid, text);
+      await ChatService.sendMessage(chatId, user.uid, text, { replyTo: pendingReply });
     } catch {
       setDraft(text);
+      setReplyTo(pendingReply);
     } finally {
       setSending(false);
     }
@@ -214,12 +225,23 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
                     createdAt={item.data.createdAt}
                     status={item.data.status}
                     onDelete={() => onDeleteMessage(item.data.id)}
+                    onReply={() =>
+                      setReplyTo(buildReplyPreview(item.data, senderNameFor(item.data)))
+                    }
                   />
                 )
               }
             />
           )}
         </View>
+
+        {replyTo && (
+          <ReplyPreviewBar
+            reply={replyTo}
+            onClose={() => setReplyTo(null)}
+            variant="composer"
+          />
+        )}
 
         <View style={[styles.composer, { paddingBottom: spacing.sm + insets.bottom }]}>
           <View style={styles.inputPill}>

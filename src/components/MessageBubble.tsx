@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import * as Clipboard from 'expo-clipboard';
 import { Timestamp } from 'firebase/firestore';
 import { colors, radius, spacing } from '@/theme';
@@ -20,6 +21,10 @@ interface Props {
   status?: MessageStatus;
   showSenderName?: string;
   onDelete?: () => void;
+  /** Triggered when the user swipes the bubble to the right past the
+   *  reply threshold. The screen is expected to populate the composer
+   *  reply preview. */
+  onReply?: () => void;
 }
 
 const formatTime = (ts?: Timestamp | null) =>
@@ -33,6 +38,14 @@ const StatusTicks: React.FC<{ status?: MessageStatus }> = ({ status }) => {
   return <Text style={[styles.tick, styles.tickRead]}>✓✓</Text>;
 };
 
+const ReplyHint: React.FC = () => (
+  <View style={styles.replyHint}>
+    <View style={styles.replyHintCircle}>
+      <Text style={styles.replyHintGlyph}>↩</Text>
+    </View>
+  </View>
+);
+
 const MessageBubble: React.FC<Props> = ({
   text,
   outgoing,
@@ -40,8 +53,10 @@ const MessageBubble: React.FC<Props> = ({
   status,
   showSenderName,
   onDelete,
+  onReply,
 }) => {
   const [pressed, setPressed] = useState(false);
+  const swipeRef = useRef<Swipeable>(null);
 
   const copy = async () => {
     await Clipboard.setStringAsync(text);
@@ -49,31 +64,74 @@ const MessageBubble: React.FC<Props> = ({
 
   const onLongPress = () => {
     const canDelete = !!onDelete && outgoing;
-    const options = canDelete ? ['Copy', 'Delete', 'Cancel'] : ['Copy', 'Cancel'];
+    const canReply = !!onReply;
+    const options = [
+      ...(canReply ? ['Reply'] : []),
+      'Copy',
+      ...(canDelete ? ['Delete'] : []),
+      'Cancel',
+    ];
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options,
-          destructiveButtonIndex: canDelete ? 1 : undefined,
+          destructiveButtonIndex: canDelete ? options.indexOf('Delete') : undefined,
           cancelButtonIndex: options.length - 1,
         },
         (index) => {
-          if (index === 0) copy();
-          if (canDelete && index === 1) onDelete?.();
+          const label = options[index];
+          if (label === 'Reply') onReply?.();
+          if (label === 'Copy') copy();
+          if (label === 'Delete') onDelete?.();
         },
       );
       return;
     }
 
-    Alert.alert('Message', text.length > 80 ? text.slice(0, 77) + '…' : text, [
-      { text: 'Copy', onPress: copy },
-      ...(canDelete
-        ? [{ text: 'Delete', style: 'destructive' as const, onPress: onDelete }]
-        : []),
-      { text: 'Cancel', style: 'cancel' as const },
-    ]);
+    const buttons = [];
+    if (canReply) buttons.push({ text: 'Reply', onPress: onReply });
+    buttons.push({ text: 'Copy', onPress: copy });
+    if (canDelete) {
+      buttons.push({ text: 'Delete', style: 'destructive' as const, onPress: onDelete });
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' as const });
+    Alert.alert('Message', text.length > 80 ? text.slice(0, 77) + '…' : text, buttons);
   };
+
+  const handleSwipeOpen = (direction: 'left' | 'right') => {
+    // Swipeable fires `left` when the LEFT actions are revealed, which
+    // happens on a swipe to the right — exactly the gesture we want.
+    if (direction === 'left' && onReply) {
+      onReply();
+    }
+    // Close immediately; we don't want a sticky reveal.
+    swipeRef.current?.close();
+  };
+
+  const bubbleContent = (
+    <Pressable
+      onLongPress={onLongPress}
+      delayLongPress={300}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={[
+        styles.bubble,
+        outgoing ? styles.outgoing : styles.incoming,
+        outgoing ? styles.outgoingTail : styles.incomingTail,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      {showSenderName && !outgoing && (
+        <Text style={styles.senderName}>{showSenderName}</Text>
+      )}
+      <Text style={styles.text}>{text}</Text>
+      <View style={styles.meta}>
+        <Text style={styles.time}>{formatTime(createdAt)}</Text>
+        {outgoing && <StatusTicks status={status} />}
+      </View>
+    </Pressable>
+  );
 
   return (
     <View
@@ -82,27 +140,21 @@ const MessageBubble: React.FC<Props> = ({
         { justifyContent: outgoing ? 'flex-end' : 'flex-start' },
       ]}
     >
-      <Pressable
-        onLongPress={onLongPress}
-        delayLongPress={300}
-        onPressIn={() => setPressed(true)}
-        onPressOut={() => setPressed(false)}
-        style={[
-          styles.bubble,
-          outgoing ? styles.outgoing : styles.incoming,
-          outgoing ? styles.outgoingTail : styles.incomingTail,
-          pressed && { opacity: 0.85 },
-        ]}
-      >
-        {showSenderName && !outgoing && (
-          <Text style={styles.senderName}>{showSenderName}</Text>
-        )}
-        <Text style={styles.text}>{text}</Text>
-        <View style={styles.meta}>
-          <Text style={styles.time}>{formatTime(createdAt)}</Text>
-          {outgoing && <StatusTicks status={status} />}
-        </View>
-      </Pressable>
+      {onReply ? (
+        <Swipeable
+          ref={swipeRef}
+          renderLeftActions={() => <ReplyHint />}
+          onSwipeableOpen={handleSwipeOpen}
+          leftThreshold={48}
+          friction={2}
+          overshootLeft={false}
+          containerStyle={styles.swipeable}
+        >
+          {bubbleContent}
+        </Swipeable>
+      ) : (
+        bubbleContent
+      )}
     </View>
   );
 };
@@ -113,6 +165,7 @@ const styles = StyleSheet.create({
     marginVertical: 3,
     flexDirection: 'row',
   },
+  swipeable: { flexShrink: 1 },
   bubble: {
     maxWidth: '78%',
     paddingVertical: 8,
@@ -147,6 +200,21 @@ const styles = StyleSheet.create({
   time: { fontSize: 10, color: colors.textMuted },
   tick: { fontSize: 11, color: colors.textMuted },
   tickRead: { color: '#34B7F1' },
+  replyHint: {
+    width: 56,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingLeft: spacing.md,
+  },
+  replyHintCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replyHintGlyph: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
 
 export default MessageBubble;
