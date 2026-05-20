@@ -1,34 +1,16 @@
 import { I18nManager } from 'react-native';
 
-export { colors } from './colors';
+export { colors, palettes } from './colors';
+export type { Palette } from './colors';
+export { spacing } from './spacing';
+export type { SpacingKey } from './spacing';
+export { typography } from './typography';
+export type { TypographyKey } from './typography';
+export { radii } from './radii';
+export type { RadiiKey } from './radii';
 
-export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
-} as const;
-
-export const radius = {
-  sm: 6,
-  md: 10,
-  lg: 16,
-  xl: 24,
-  pill: 999,
-  bubble: 18,
-} as const;
-
-export const typography = {
-  h1: { fontSize: 28, fontWeight: '700' as const },
-  h2: { fontSize: 22, fontWeight: '700' as const },
-  h3: { fontSize: 18, fontWeight: '600' as const },
-  body: { fontSize: 15, fontWeight: '400' as const },
-  bodyStrong: { fontSize: 15, fontWeight: '600' as const },
-  caption: { fontSize: 12, fontWeight: '400' as const },
-  small: { fontSize: 11, fontWeight: '400' as const },
-} as const;
+// Back-compat alias — older code imports `radius` from the theme module.
+export { radii as radius } from './radii';
 
 export const shadow = {
   card: {
@@ -45,6 +27,20 @@ export const shadow = {
     shadowRadius: 8,
     elevation: 6,
   },
+  bubble: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+};
+
+export const motion = {
+  fast: 150,
+  base: 220,
+  slow: 320,
+  easing: 'ease-out' as const,
 };
 
 export const isRTL = I18nManager.isRTL;
