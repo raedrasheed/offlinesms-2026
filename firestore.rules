@@ -7,6 +7,8 @@ rules_version = '2';
 //   - Chat docs and messages are restricted to chat members.
 //   - Group docs and messages are restricted to group members.
 //   - Senders cannot impersonate other users (senderId must match auth uid).
+//   - Pin / mute / archive state on a chat can only be flipped for the
+//     acting user's own uid, never for someone else.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -15,6 +17,13 @@ service cloud.firestore {
     }
     function isSelf(uid) {
       return signedIn() && request.auth.uid == uid;
+    }
+
+    /** Returns true if the only difference between two list fields is the
+     *  addition or removal of `uid` (any other diff is rejected). */
+    function listDiffOnlyTouchesSelf(before, after, uid) {
+      return before.toSet().difference(after.toSet()).hasOnly([uid])
+        && after.toSet().difference(before.toSet()).hasOnly([uid]);
     }
 
     // --- users -------------------------------------------------------------
@@ -37,13 +46,39 @@ service cloud.firestore {
         return signedIn() && request.auth.uid in request.resource.data.members;
       }
 
+      // Pin/mute/archive arrays: an update can only add or remove the
+      // acting user's own uid from each of these arrays. The arrays may
+      // be absent in either snapshot (treated as empty).
+      function selfOnlyFlagChanges() {
+        return listDiffOnlyTouchesSelf(
+          resource.data.get('pinnedBy', []),
+          request.resource.data.get('pinnedBy', []),
+          request.auth.uid
+        )
+        && listDiffOnlyTouchesSelf(
+          resource.data.get('mutedBy', []),
+          request.resource.data.get('mutedBy', []),
+          request.auth.uid
+        )
+        && listDiffOnlyTouchesSelf(
+          resource.data.get('archivedBy', []),
+          request.resource.data.get('archivedBy', []),
+          request.auth.uid
+        );
+      }
+
       allow read: if isMember();
       // Creator must include themselves and exactly 2 members for a 1:1 chat.
       allow create:
         if willBeMember()
         && request.resource.data.members.size() == 2;
-      // Members can update last-message metadata and their own unread counter.
-      allow update: if isMember();
+      // Members can update last-message metadata, their own unread counter,
+      // and toggle their own pin / mute / archive flags. The members list
+      // itself is immutable here (no add/remove for 1:1 chats).
+      allow update:
+        if isMember()
+        && request.resource.data.members == resource.data.members
+        && selfOnlyFlagChanges();
       allow delete: if false;
 
       match /messages/{messageId} {
@@ -59,15 +94,26 @@ service cloud.firestore {
         allow create:
           if parentIsMember()
           && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 4000;
+          && (
+            (request.resource.data.get('type', 'text') == 'text'
+              && request.resource.data.text is string
+              && request.resource.data.text.size() > 0
+              && request.resource.data.text.size() <= 4000)
+            || (request.resource.data.get('type', 'text') == 'image'
+              && request.resource.data.get('attachmentURL', '') is string)
+          );
 
-        // Only allow status/readBy updates by members; senderId/text immutable.
+        // status / readBy / reactions can change. senderId, text, type,
+        // attachmentURL and replyTo are immutable once created.
         allow update:
           if parentIsMember()
           && request.resource.data.senderId == resource.data.senderId
-          && request.resource.data.text == resource.data.text;
+          && request.resource.data.get('text', '') == resource.data.get('text', '')
+          && request.resource.data.get('type', 'text') == resource.data.get('type', 'text')
+          && request.resource.data.get('attachmentURL', null)
+              == resource.data.get('attachmentURL', null)
+          && request.resource.data.get('replyTo', null)
+              == resource.data.get('replyTo', null);
 
         allow delete:
           if parentIsMember() && resource.data.senderId == request.auth.uid;
@@ -88,6 +134,18 @@ service cloud.firestore {
       function isAdmin() {
         return signedIn() && request.auth.uid in admins();
       }
+      function selfOnlyFlagChangesGroup() {
+        return listDiffOnlyTouchesSelf(
+          resource.data.get('pinnedBy', []),
+          request.resource.data.get('pinnedBy', []),
+          request.auth.uid
+        )
+        && listDiffOnlyTouchesSelf(
+          resource.data.get('mutedBy', []),
+          request.resource.data.get('mutedBy', []),
+          request.auth.uid
+        );
+      }
 
       allow read: if isMember();
       allow create:
@@ -95,20 +153,27 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.auth.uid in request.resource.data.members
         && request.auth.uid in request.resource.data.admins;
-      // Members can update metadata (last message). Membership/admin changes
-      // are only allowed by admins or for the user removing themselves.
+      // Members can update metadata + their own pin/mute. Membership and
+      // admin changes are still admin-gated (with the self-leave exception).
       allow update:
         if isMember()
         && (
-          isAdmin()
-          || (
-            request.resource.data.members.size() == members().size() - 1
-            && !(request.auth.uid in request.resource.data.members)
+          (
+            // Admin: free rein on metadata, membership, admins.
+            isAdmin()
+            && selfOnlyFlagChangesGroup()
           )
           || (
-            // Non-admin metadata-only updates (last message, etc.)
+            // Non-admin self-removal.
+            request.resource.data.members.size() == members().size() - 1
+            && !(request.auth.uid in request.resource.data.members)
+            && request.resource.data.admins == admins()
+          )
+          || (
+            // Non-admin metadata-only updates including pin/mute toggle.
             request.resource.data.members == members()
             && request.resource.data.admins == admins()
+            && selfOnlyFlagChangesGroup()
           )
         );
       allow delete: if isAdmin();
@@ -126,18 +191,82 @@ service cloud.firestore {
         allow create:
           if parentIsMember()
           && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 4000;
+          && (
+            (request.resource.data.get('type', 'text') == 'text'
+              && request.resource.data.text is string
+              && request.resource.data.text.size() > 0
+              && request.resource.data.text.size() <= 4000)
+            || (request.resource.data.get('type', 'text') == 'image'
+              && request.resource.data.get('attachmentURL', '') is string)
+          );
 
         allow update:
           if parentIsMember()
           && request.resource.data.senderId == resource.data.senderId
-          && request.resource.data.text == resource.data.text;
+          && request.resource.data.get('text', '') == resource.data.get('text', '')
+          && request.resource.data.get('type', 'text') == resource.data.get('type', 'text')
+          && request.resource.data.get('attachmentURL', null)
+              == resource.data.get('attachmentURL', null)
+          && request.resource.data.get('replyTo', null)
+              == resource.data.get('replyTo', null);
 
         allow delete:
           if parentIsMember() && resource.data.senderId == request.auth.uid;
       }
+    }
+
+    // --- typing indicators ------------------------------------------------
+    // Path: typing/{chatId}/users/{uid}. Each doc carries the typing
+    // user's own state with a server timestamp. Stale entries are
+    // filtered client-side; explicit deletes are also allowed.
+    match /typing/{chatId}/users/{uid} {
+      allow read: if signedIn();
+      allow write: if isSelf(uid)
+        && request.resource.data.uid == uid;
+      allow delete: if isSelf(uid);
+    }
+
+    // --- statuses (24h stories) -------------------------------------------
+    match /statuses/{statusId} {
+      allow read: if signedIn();
+      allow create:
+        if signedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.type in ['text', 'image'];
+      // After creation only viewedBy can grow, and only with the viewer
+      // adding themselves (not stripping others).
+      allow update:
+        if signedIn()
+        && request.resource.data.authorId == resource.data.authorId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.expiresAt == resource.data.expiresAt
+        && request.resource.data.type == resource.data.type
+        && resource.data.get('viewedBy', []).toSet()
+            .difference(request.resource.data.get('viewedBy', []).toSet()).size() == 0
+        && request.resource.data.get('viewedBy', []).toSet()
+            .difference(resource.data.get('viewedBy', []).toSet())
+            .hasOnly([request.auth.uid]);
+      allow delete:
+        if signedIn() && resource.data.authorId == request.auth.uid;
+    }
+
+    // --- calls (log only — actual signaling not implemented) --------------
+    match /calls/{callId} {
+      function participants() {
+        return resource.data.participants;
+      }
+      allow read: if signedIn() && request.auth.uid in participants();
+      allow create:
+        if signedIn()
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.initiatedBy == request.auth.uid
+        && request.resource.data.kind in ['voice', 'video'];
+      allow update:
+        if signedIn()
+        && request.auth.uid in participants()
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.initiatedBy == resource.data.initiatedBy;
+      allow delete: if false;
     }
 
     // --- contacts (each user's personal address book) ---------------------
