@@ -15,6 +15,7 @@ import { UserService } from '@/services/userService';
 import { useAuth } from '@/hooks/useAuth';
 import { useChats } from '@/hooks/useChats';
 import { useChatActions } from '@/hooks/useChatActions';
+import { isOnline } from '@/utils/presence';
 import { Chat, UserProfile } from '@/types/models';
 import { AppStackParamList, MainTabParamList } from '@/navigation/types';
 
@@ -163,6 +164,7 @@ const ChatsScreen: React.FC<Props> = () => {
                 unread={user ? chat.unread?.[user.uid] ?? 0 : 0}
                 pinned={actions.isPinned(chat)}
                 muted={actions.isMuted(chat)}
+                online={isOnline(other?.lastSeen)}
                 onPress={() =>
                   navigation.navigate('ChatDetails', {
                     chatId: chat.id,

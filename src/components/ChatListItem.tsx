@@ -14,6 +14,7 @@ interface Props {
   unread?: number;
   pinned?: boolean;
   muted?: boolean;
+  online?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
 }
@@ -26,6 +27,7 @@ const ChatListItem: React.FC<Props> = ({
   unread = 0,
   pinned = false,
   muted = false,
+  online = false,
   onPress,
   onLongPress,
 }) => {
@@ -37,7 +39,7 @@ const ChatListItem: React.FC<Props> = ({
       android_ripple={{ color: colors.pressedTint }}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <Avatar uri={photoURL ?? undefined} name={title} size={52} />
+      <Avatar uri={photoURL ?? undefined} name={title} size={52} online={online} />
       <View style={styles.middle}>
         <View style={styles.titleRow}>
           <Text style={styles.title} numberOfLines={1}>

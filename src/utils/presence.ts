@@ -1,5 +1,14 @@
 import { Timestamp } from 'firebase/firestore';
 
+/** Consider a user "online" if their lastSeen heartbeat fired within the
+ *  past 2 minutes. Matches the threshold used by formatLastSeen. */
+export const ONLINE_THRESHOLD_MS = 2 * 60_000;
+
+export const isOnline = (lastSeen?: Timestamp | null): boolean => {
+  if (!lastSeen) return false;
+  return Date.now() - lastSeen.toMillis() < ONLINE_THRESHOLD_MS;
+};
+
 /** Render a presence label like "online", "last seen 5m ago",
  *  "last seen yesterday", "last seen 12 Mar". */
 export const formatLastSeen = (lastSeen?: Timestamp | null): string => {

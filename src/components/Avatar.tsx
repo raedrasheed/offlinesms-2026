@@ -7,6 +7,8 @@ interface Props {
   name?: string;
   size?: number;
   style?: ViewStyle;
+  /** Render a small online dot in the bottom-right corner. */
+  online?: boolean;
 }
 
 const initialsOf = (name?: string) =>
@@ -18,14 +20,45 @@ const initialsOf = (name?: string) =>
     .join('')
     .toUpperCase();
 
-const Avatar: React.FC<Props> = ({ uri, name, size = 44, style }) => {
+const Avatar: React.FC<Props> = ({ uri, name, size = 44, style, online = false }) => {
   const dims = { width: size, height: size, borderRadius: size / 2 };
-  if (uri) {
-    return <Image source={{ uri }} style={[dims, style]} />;
-  }
+  // Online dot sized relative to the avatar so it scales with the row.
+  const dotSize = Math.max(8, Math.round(size * 0.26));
+  const ringSize = dotSize + 4;
   return (
-    <View style={[styles.fallback, dims, style]}>
-      <Text style={[styles.initials, { fontSize: size * 0.38 }]}>{initialsOf(name)}</Text>
+    <View style={[dims, { position: 'relative' }, style]}>
+      {uri ? (
+        <Image source={{ uri }} style={dims} />
+      ) : (
+        <View style={[styles.fallback, dims]}>
+          <Text style={[styles.initials, { fontSize: size * 0.38 }]}>{initialsOf(name)}</Text>
+        </View>
+      )}
+      {online && (
+        <View
+          style={[
+            styles.dotRing,
+            {
+              width: ringSize,
+              height: ringSize,
+              borderRadius: ringSize / 2,
+              right: -1,
+              bottom: -1,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.dot,
+              {
+                width: dotSize,
+                height: dotSize,
+                borderRadius: dotSize / 2,
+              },
+            ]}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -36,10 +69,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initials: {
-    color: '#fff',
-    fontWeight: '700',
+  initials: { color: '#fff', fontWeight: '700' },
+  dotRing: {
+    position: 'absolute',
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  dot: { backgroundColor: colors.online },
 });
 
 export default Avatar;

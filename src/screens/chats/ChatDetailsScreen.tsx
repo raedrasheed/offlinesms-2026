@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import Header from '@/components/Header';
 import Avatar from '@/components/Avatar';
 import MessageBubble from '@/components/MessageBubble';
@@ -23,11 +23,10 @@ import Wallpaper from '@/components/Wallpaper';
 import { colors, radius, spacing } from '@/theme';
 import { ChatService } from '@/services/chatService';
 import { useAuth } from '@/hooks/useAuth';
-import { ChatMessage, UserProfile } from '@/types/models';
+import { usePresence } from '@/hooks/usePresence';
+import { ChatMessage } from '@/types/models';
 import { AppStackParamList } from '@/navigation/types';
-import { db } from '@/firebase/config';
-import { Collections } from '@/firebase/collections';
-import { formatLastSeen } from '@/utils/presence';
+import { formatLastSeen, isOnline } from '@/utils/presence';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'ChatDetails'>;
 
@@ -59,7 +58,7 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const { chatId, title, photoURL, otherUid } = route.params;
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [other, setOther] = useState<UserProfile | null>(null);
+  const other = usePresence(otherUid);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<Item>>(null);
@@ -78,14 +77,6 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     });
     return unsub;
   }, [chatId, user]);
-
-  // Live subscription to the other participant's presence/profile.
-  useEffect(() => {
-    if (!otherUid) return;
-    return onSnapshot(doc(db, Collections.users, otherUid), (snap) => {
-      if (snap.exists()) setOther({ uid: otherUid, ...(snap.data() as any) });
-    });
-  }, [otherUid]);
 
   const items: Item[] = useMemo(() => {
     const out: Item[] = [];
@@ -148,7 +139,12 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
               onPress={() => otherUid && navigation.navigate('ContactProfile', { uid: otherUid })}
               hitSlop={6}
             >
-              <Avatar uri={photoURL ?? undefined} name={title} size={36} />
+              <Avatar
+                uri={photoURL ?? undefined}
+                name={title}
+                size={36}
+                online={isOnline(other?.lastSeen)}
+              />
             </TouchableOpacity>
           </View>
         }
