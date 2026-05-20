@@ -54,8 +54,6 @@ contacts/{uid}/list/{contactId}           personal address-book entries
   name, phoneNumber, labels: [string]
 
 notifications/{uid}/items/{notifId}       per-user inbox events
-
-otpRequests/{phone}                       SERVER-ONLY (cloud functions)
 ```
 
 ## Message shape

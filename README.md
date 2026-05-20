@@ -1,10 +1,10 @@
-# OfflineSMS — Mobile Messaging App (Phase 1)
+# OfflineSMS — Mobile Messaging App
 
-A React Native + Expo + Firebase messaging app built with the OfflineSMS brand. The
-user experience is inspired by modern messaging apps (one-tap chats, real-time
-delivery, message bubbles, group chats) but the visual identity, logo,
-colors, and naming are entirely OfflineSMS — no third-party brand assets are
-included.
+A React Native + Expo + Firebase messaging app built with the OfflineSMS
+brand. The user experience uses standard messaging conventions (chat
+list, message bubbles with delivery ticks, group chats, presence, pin /
+mute / archive) but the visual identity, logo, colors, and naming are
+entirely OfflineSMS.
 
 > **Website:** [offlinesms.com](http://offlinesms.com/)
 
@@ -17,9 +17,9 @@ included.
 | Framework      | React Native (Expo SDK 51)                |
 | Language       | TypeScript (strict)                       |
 | Navigation     | React Navigation v6 (native-stack + tabs) |
-| State          | Local + React Context (auth)              |
+| State          | React Context (auth) + hook-based subs    |
 | Backend        | Firebase only (no custom server)          |
-| Auth           | Firebase Auth + Custom Tokens, OTP via Meta WhatsApp Cloud API |
+| Auth           | Firebase Authentication — Email + Password|
 | Database       | Cloud Firestore (realtime listeners)      |
 | Storage        | Firebase Storage (avatars, attachments)   |
 | Push           | Expo Notifications → FCM                  |
@@ -31,47 +31,54 @@ included.
 
 ```
 offlinesms-2026/
-├─ App.tsx                       # Root component, providers, splash gate
-├─ app.json                      # Expo config (brand, plugins, FB extras)
-├─ babel.config.js               # @ alias + reanimated
-├─ firebase.json                 # CLI config for rules + functions deploy
-├─ firestore.rules               # Firestore security rules
-├─ storage.rules                 # Storage security rules
-├─ functions/                    # Cloud Functions (WhatsApp OTP)
-│  ├─ src/index.ts               # requestWhatsAppOtp + verifyWhatsAppOtp
-│  ├─ package.json
-│  └─ tsconfig.json
+├─ App.tsx
+├─ app.json                       # Expo config (brand, plugins, FB config)
+├─ babel.config.js                # @ alias + reanimated
+├─ firebase.json                  # CLI config for rules deploy
+├─ firestore.rules                # Firestore security rules
+├─ storage.rules                  # Storage security rules
+├─ docs/
+│  ├─ DATA_MODEL.md               # Collections, fields, rule invariants
+│  └─ SMOKE_TEST.md               # Manual checklist for verifying changes
 ├─ package.json
 ├─ tsconfig.json
 └─ src/
-   ├─ components/                # Reusable UI primitives
-   │  ├─ Avatar.tsx
+   ├─ components/
+   │  ├─ Avatar.tsx               # With optional online dot
    │  ├─ Button.tsx
-   │  ├─ ChatListItem.tsx
+   │  ├─ ChatListItem.tsx         # Pin / mute / unread badge
+   │  ├─ DateSeparator.tsx
    │  ├─ EmptyState.tsx
    │  ├─ Header.tsx
+   │  ├─ Icons.tsx                # Pin / Mute / Archive / Check SVGs
    │  ├─ Input.tsx
    │  ├─ Loader.tsx
-   │  ├─ Logo.tsx                # OfflineSMS SVG logo (original art)
-   │  ├─ MessageBubble.tsx
-   │  └─ SearchBar.tsx
+   │  ├─ Logo.tsx
+   │  ├─ MessageBubble.tsx        # Long-press menu, status ticks
+   │  ├─ SearchBar.tsx
+   │  └─ Wallpaper.tsx            # Chat-thread background pattern
    ├─ firebase/
-   │  ├─ collections.ts          # Collection name constants
-   │  └─ config.ts               # Firebase initialization (Auth, FS, Storage)
+   │  ├─ collections.ts
+   │  └─ config.ts                # Firebase initialization
    ├─ hooks/
-   │  └─ useAuth.tsx             # AuthProvider + useAuth() context
+   │  ├─ useAuth.tsx              # Provider + lastSeen heartbeat
+   │  ├─ useChats.ts              # Live chat list subscription
+   │  ├─ useMessages.ts           # Live messages subscription
+   │  ├─ usePresence.ts           # Live peer profile / lastSeen
+   │  ├─ useTypingIndicator.ts    # Writes "I'm typing"
+   │  ├─ useTypingOthers.ts       # Reads who else is typing
+   │  └─ useChatActions.ts        # Bound pin/mute/archive/react/reply
    ├─ navigation/
-   │  ├─ AppStack.tsx            # Authenticated stack (tabs + modals)
-   │  ├─ AuthStack.tsx           # Welcome → Phone → OTP → Profile
-   │  ├─ MainTabs.tsx            # Chats / Groups / Contacts / Settings
-   │  ├─ RootNavigator.tsx       # Splash / Auth / App switching
-   │  └─ types.ts                # Type-safe nav params
+   │  ├─ AppStack.tsx
+   │  ├─ AuthStack.tsx
+   │  ├─ MainTabs.tsx
+   │  ├─ RootNavigator.tsx
+   │  └─ types.ts
    ├─ screens/
    │  ├─ SplashScreen.tsx
    │  ├─ auth/
    │  │  ├─ WelcomeScreen.tsx
-   │  │  ├─ PhoneLoginScreen.tsx
-   │  │  ├─ OtpVerifyScreen.tsx
+   │  │  ├─ EmailAuthScreen.tsx   # Sign-up / sign-in (email + password)
    │  │  └─ ProfileSetupScreen.tsx
    │  ├─ chats/
    │  │  ├─ ChatsScreen.tsx
@@ -82,276 +89,221 @@ offlinesms-2026/
    │  │  ├─ CreateGroupScreen.tsx
    │  │  └─ GroupChatScreen.tsx
    │  ├─ contacts/
-   │  │  └─ ContactsScreen.tsx
+   │  │  ├─ ContactsScreen.tsx    # Reads device contacts via expo-contacts
+   │  │  └─ ContactProfileScreen.tsx
    │  └─ settings/
    │     └─ SettingsScreen.tsx
    ├─ services/
-   │  ├─ authService.ts          # WhatsApp OTP send + verify (callable fns)
-   │  ├─ chatService.ts          # 1:1 chats + messages + read state
-   │  ├─ groupService.ts         # Groups + group messages
-   │  ├─ notificationService.ts  # FCM/Expo token registration
-   │  └─ userService.ts          # Profile CRUD, user lookup
+   │  ├─ authService.ts           # Email/password sign-up + sign-in
+   │  ├─ chatService.ts           # 1:1 chats, messages, pin/mute/archive,
+   │  │                           #   reactions, reply, image upload
+   │  ├─ groupService.ts          # Groups + group messages + pin/mute
+   │  ├─ presenceService.ts       # Typing indicator collection
+   │  ├─ notificationService.ts   # FCM/Expo token registration
+   │  └─ userService.ts           # Profile CRUD + lastSeen heartbeat
    ├─ theme/
-   │  ├─ colors.ts               # OfflineSMS palette
-   │  └─ index.ts                # spacing, radius, typography, RTL flag
+   │  ├─ colors.ts                # #2596be palette + dark-mode prep
+   │  ├─ spacing.ts
+   │  ├─ typography.ts
+   │  ├─ radii.ts
+   │  └─ index.ts                 # Re-exports + shadow + motion tokens
    ├─ types/
-   │  └─ models.ts               # UserProfile, Chat, ChatMessage, Group
+   │  └─ models.ts                # UserProfile / Chat / ChatMessage /
+   │                              #   Group / Status / CallLog / ReplyPreview
    └─ utils/
-      └─ format.ts
+      ├─ format.ts
+      └─ presence.ts              # isOnline + formatLastSeen
 ```
 
 ---
 
 ## 3. Installation
 
-```bash
-# 1. Install Node deps
+```powershell
+# 1. Install JS deps
 npm install
 
-# 2. Install Expo CLI globally if you don't have it
-npm install -g expo-cli eas-cli
-
-# 3. Add the required iOS / Android assets (icon, splash, etc.) under /assets
-mkdir -p assets
-# Drop in: icon.png, splash.png, adaptive-icon.png, favicon.png
+# 2. Add brand assets under /assets:
+#    icon.png, splash.png, adaptive-icon.png, favicon.png
+mkdir assets
 ```
 
-> OfflineSMS authenticates with **WhatsApp OTP only** — there is no SMS
-> fallback in the UI. The client never talks to WhatsApp directly; it calls
-> two Firebase callable Cloud Functions which talk to Meta's WhatsApp Cloud
-> API and return a Firebase Custom Token.
+The `assets/icon.png` file is referenced by `app.json` for the Android
+launcher icon, the in-app splash, and the `Logo` component. Drop in
+your real artwork (ideally 1024×1024 PNGs) before publishing.
 
 ---
 
 ## 4. Firebase setup
 
-1. Go to the [Firebase console](https://console.firebase.google.com) and create
-   a project (e.g. `offlinesms-prod`). Upgrade to the **Blaze plan** — Cloud
-   Functions require it.
+1. Create a project at the [Firebase console](https://console.firebase.google.com)
+   (e.g. `offlinesms-prod`).
 2. Enable products:
-   - **Authentication** — leave Phone sign-in **disabled**. We sign users in
-     with Custom Tokens minted by Cloud Functions after WhatsApp verification.
+   - **Authentication → Sign-in method → Email/Password → Enable**.
    - **Cloud Firestore** (start in production mode).
    - **Storage**.
-   - **Cloud Functions**.
-   - **Cloud Messaging** (FCM).
+   - **Cloud Messaging** (FCM) — only needed when you wire push later.
 3. Register apps:
-   - iOS bundle id: `com.offlinesms.app` → download `GoogleService-Info.plist`.
    - Android package: `com.offlinesms.app` → download `google-services.json`.
+   - iOS bundle id: `com.offlinesms.app` → download `GoogleService-Info.plist`.
 4. Copy the **web** Firebase config (`apiKey`, `authDomain`, `projectId`,
    `storageBucket`, `messagingSenderId`, `appId`) into `app.json` under
    `expo.extra.firebase`.
-5. Install function deps and deploy rules + functions:
-   ```bash
+5. Deploy rules — either via CLI:
+   ```powershell
    npm i -g firebase-tools
    firebase login
-   firebase use --add                # pick your project
-   (cd functions && npm install)
-   firebase deploy --only firestore:rules,storage:rules,functions
+   firebase use --add
+   firebase deploy --only firestore:rules,storage:rules
    ```
-6. (Recommended) Add a composite index on `chats` for
-   `members array-contains + lastMessageAt desc`, and on `groups` for
-   `members array-contains + lastMessageAt desc`. Firestore will prompt you
-   with a direct link the first time the queries run.
+   …or paste the contents of `firestore.rules` and `storage.rules` into
+   the Firebase Console (**Firestore → Rules** and **Storage → Rules**)
+   and click Publish.
 
-### 4a. WhatsApp Cloud API setup (Meta)
-
-1. Open [Meta for Developers](https://developers.facebook.com), create an app
-   of type **Business**, and add the **WhatsApp** product.
-2. Under *WhatsApp → API Setup*:
-   - Note your **Phone number ID** (numeric).
-   - Generate a **permanent system-user access token** (Business Manager →
-     System Users → Add → assign the WhatsApp app → generate token with
-     `whatsapp_business_messaging` + `whatsapp_business_management` scopes).
-3. Create an **authentication message template** named `otp_login`:
-   - Category: **Authentication**.
-   - Language: `en_US` (or whatever you want as default).
-   - Body: `Your OfflineSMS verification code is {{1}}.`
-   - Button: *Copy code* → `{{1}}`.
-   - Submit for review and wait for approval.
-4. Store the credentials as Firebase Functions secrets:
-   ```bash
-   firebase functions:secrets:set WHATSAPP_PHONE_NUMBER_ID
-   firebase functions:secrets:set WHATSAPP_ACCESS_TOKEN
-   firebase functions:secrets:set WHATSAPP_TEMPLATE_NAME    # otp_login
-   firebase functions:secrets:set WHATSAPP_TEMPLATE_LANG    # en_US
-   firebase functions:secrets:set WHATSAPP_API_VERSION      # v20.0
-   firebase functions:secrets:set OTP_HASH_SECRET           # any long random string
-   ```
-5. Redeploy: `firebase deploy --only functions`.
-
-### 4b. Auth flow at runtime
-
-```
-PhoneLoginScreen      ──requestWhatsAppOtp(phone)──▶  Cloud Function
-                                                       │  generate 6-digit code
-                                                       │  store hash in otpRequests/
-                                                       │  POST to graph.facebook.com
-                                                       ▼
-                                                  WhatsApp delivers code
-OtpVerifyScreen       ──verifyWhatsAppOtp(phone,code)─▶ Cloud Function
-                                                       │  check hash, expiry, attempts
-                                                       │  auth.createUser or getUser
-                                                       │  mint custom token
-                                                       ▼
-                       ◀──{ token }──────────────────  signInWithCustomToken(token)
-```
+> The Firestore database in this project is named `offlinesms-prod`
+> (set via `getFirestore(app, 'offlinesms-prod')` in
+> `src/firebase/config.ts`). If you create a new project with the
+> default `(default)` database name, update that constant.
 
 ---
 
 ## 5. Running the app
 
-```bash
-# Start Metro / Expo dev server
+```powershell
+# Dev server
 npm start
 
-# Open on iOS Simulator
-npm run ios
-
-# Open on Android Emulator
-npm run android
-
 # Type-check the TS source
-npm run typecheck
+npx tsc --noEmit
 ```
 
-Sign in with a phone number, complete OTP and profile setup, then you'll land
-on the **Chats** tab. The Contacts tab lists every other OfflineSMS user — tap
-one to open a 1:1 chat. The Groups tab supports creating groups and chatting
-inside them. All chat surfaces use Firestore real-time listeners.
+In the Expo dev tools: `a` for Android emulator, `i` for iOS simulator,
+or scan the QR code with Expo Go on a real device.
+
+To build a release APK locally:
+
+```powershell
+npx expo prebuild --platform android --clean
+cd android
+.\gradlew assembleRelease
+```
+
+(Requires JDK 17, Android SDK, ~6 GB free disk. See the
+release-build notes if you hit signing or disk-space issues.)
 
 ---
 
-## 6. Firestore data model
+## 6. Data model and rules
+
+The collections, fields, service entry points, hooks, and rule
+invariants are documented in **[docs/DATA_MODEL.md](docs/DATA_MODEL.md)**.
+A 27-step manual smoke checklist (data layer) plus 16 UI verification
+steps live in **[docs/SMOKE_TEST.md](docs/SMOKE_TEST.md)** — run those
+after any non-trivial change.
+
+Quick summary:
 
 ```
-users/{uid}
-  ├─ uid, phoneNumber, displayName, photoURL, about
-  ├─ createdAt, lastSeen, fcmToken
-
-chats/{chatId}                       # chatId = sorted("uidA_uidB")
-  ├─ members:        [uidA, uidB]
-  ├─ lastMessage:    string
-  ├─ lastMessageAt:  timestamp
-  ├─ lastMessageSenderId: string
-  ├─ unread:         { [uid]: number }
-  └─ messages/{messageId}
-       ├─ senderId, text, type
-       ├─ createdAt, status (sent|delivered|read)
-       └─ readBy: [uid, ...]
-
-groups/{groupId}
-  ├─ name, photoURL, createdBy
-  ├─ members: [uid, ...]
-  ├─ admins:  [uid, ...]
-  ├─ lastMessage, lastMessageAt
-  └─ messages/{messageId}            # same shape as chat messages
-
-contacts/{uid}/list/{contactId}      # personal address book (Phase 1.5)
-notifications/{uid}/items/{notifId}  # per-user inbox events
-
-otpRequests/{phoneNumber}            # SERVER-ONLY. Holds the SHA-256 hash of
-                                     # the active WhatsApp OTP, its expiry,
-                                     # and an attempt counter. Clients are
-                                     # denied by rules; only the admin SDK
-                                     # used in Cloud Functions can touch it.
-  ├─ codeHash, expiresAt, attempts
-  └─ lastSentAt, createdAt
+users/{uid}                            displayName, photoURL, about,
+                                        lastSeen, fcmToken
+chats/{chatId}                          members[2], lastMessage*,
+                                        unread{uid}, pinnedBy[],
+                                        mutedBy[], archivedBy[]
+chats/{chatId}/messages/{msgId}         senderId, text, type, replyTo,
+                                        reactions{emoji:[uid]}, status,
+                                        readBy[], attachmentURL?
+groups/{groupId}                        members[], admins[], pinnedBy[],
+                                        mutedBy[]
+groups/{groupId}/messages/{msgId}       same shape as chat messages
+typing/{chatId}/users/{uid}             uid, updatedAt   (server-only writes)
+statuses/{statusId}                     authorId, type, expiresAt, viewedBy[]
+calls/{callId}                          participants[], initiatedBy, kind
+contacts/{uid}/list/{contactId}         personal address-book entries
+notifications/{uid}/items/{notifId}     per-user inbox events
 ```
+
+Rule highlights:
+
+- Senders cannot impersonate other users (`senderId == request.auth.uid`).
+- `pinnedBy` / `mutedBy` / `archivedBy` diffs must only touch the acting
+  user's own uid.
+- Messages: `text`, `type`, `attachmentURL`, and `replyTo` are immutable
+  once written.
+- Group membership / admin changes are admin-gated except a member can
+  remove themselves.
+- Statuses' `viewedBy` may only grow with the viewer's own uid.
 
 ---
 
-## 7. Security rules (summary)
+## 7. UI / UX notes
 
-- **Anyone signed in** can read user profiles (used to render avatars in shared
-  chats).
-- **Only the owner** can write their own profile, contacts, or notifications.
-- **Chats** are readable/writable only by their members; 1:1 chats must have
-  exactly two members at creation time.
-- **Messages** must be created with `senderId == request.auth.uid`, are
-  immutable for `senderId` and `text`, and can only be deleted by their sender.
-- **Groups** can only be created with the creator listed as both member and
-  admin. Membership/admin changes require admin role, except a user removing
-  themselves.
-- **Storage**: each user can only upload their own avatar (`avatars/<uid>.jpg`)
-  and attachments are size-limited (25 MB).
-
-See `firestore.rules` and `storage.rules` for the full definitions.
-
----
-
-## 8. UI / UX notes
-
-- **Brand color**: turquoise/blue `#0AB3B8` (`theme/colors.ts`), used for the
-  primary button, send button, FAB, top headers, and badges.
-- **Original logo** rendered with `react-native-svg` (`components/Logo.tsx`),
-  so no third-party brand assets are bundled. Swap the SVG path with the
-  official OfflineSMS art when you have the source file.
-- **Rounded message bubbles** with directional tails; outgoing bubbles use a
-  soft-tinted brand color, incoming bubbles are white-on-grey.
-- **RTL prep**: `theme/index.ts` exports `isRTL` from `I18nManager`. Layouts
-  use `flexDirection: 'row'` and gap-based spacing so flipping to RTL works
-  automatically. Add language detection in Phase 2 to call
-  `I18nManager.forceRTL(true)` for Arabic locales.
-- **Responsive**: All layouts use `SafeAreaView`, flex, and `KeyboardAvoidingView`
-  — no fixed widths. Verified to render correctly on iPhone SE through
-  Pixel 7 Pro size classes.
+- **Brand color**: `#2596be` (`theme/colors.ts`). All headers, FAB,
+  send button, unread badge and active states pull from this palette.
+- **Theme tokens** split across `colors.ts`, `spacing.ts`,
+  `typography.ts`, `radii.ts`. Dark-mode palette is already defined in
+  `palettes.dark` — flipping it on requires a small theme provider
+  (TODO for a later phase).
+- **Logo**: `assets/icon.png` rendered directly by `components/Logo.tsx`
+  and the in-app splash. Drop your real PNGs into `/assets`.
+- **Chat list polish**: pin/unpin & mute/unmute & archive/unarchive via
+  long-press; pinned chats float to the top; archived chats live behind
+  an expandable banner; muted chats show a small mute glyph beside the
+  name and a desaturated unread badge.
+- **Online indicator**: 2-minute `lastSeen` threshold (`utils/presence`).
+  Green dot on avatars when fresh; chat header subtitle reads
+  *"online"* / *"last seen Xm ago"* / *"yesterday"* / date.
+- **Long-press a message**: Copy (via `expo-clipboard`) and, on your own
+  messages, Delete.
+- **RTL prep**: `theme/index.ts` exposes `isRTL` from `I18nManager`.
+  Layouts use flex + gap so flipping for Arabic works automatically;
+  add language detection + `I18nManager.forceRTL(true)` in Phase 2.
 - **Loading / empty / error states**: `Loader`, `EmptyState` and inline
   validation messages are used across every screen.
 
 ---
 
-## 9. Phase 2 roadmap
+## 8. Phase 2 roadmap
 
-Phase 1 is the messaging foundation. Phase 2 will add the OfflineSMS-specific
-features:
+Phase 1 is the messaging foundation. Phase 2 adds OfflineSMS-specific
+value:
 
-1. **SMS fallback** — when the recipient is offline beyond a threshold, queue
-   the message and deliver via carrier SMS through a Twilio / local-gateway
-   integration. Suggested model:
-   - Cloud Function listens to `chats/{id}/messages/{id}` writes.
-   - If `recipient.lastSeen > 30m`, push to `smsQueue` collection.
-   - Worker function delivers via SMS gateway and writes back delivery status.
-2. **Bulk messaging** — campaign composer screen → fan-out via Cloud Functions
-   to per-user `notifications` and `chats` writes; client-side rate limiting.
-3. **Contact grouping & segments** — extend `contacts/{uid}/list/*` with
-   `labels: string[]`, plus a `segments` collection per user.
-4. **Alerts and reminders** — `reminders/{uid}/items/{id}` with `nextRunAt`,
-   processed by a scheduled Cloud Function.
-5. **Staff / customer comms** — workspace concept (`workspaces/{id}`) and a
-   role attribute on `users`. Staff can be assigned to customer threads.
-6. **Marketing campaigns** — `campaigns` collection with target segments,
-   scheduling, analytics aggregations.
-7. **Admin dashboard** — separate React app reading the same Firestore data
-   with admin-claim-gated security rules.
-8. **Realtime presence and typing indicators** — `users/{uid}/presence` doc or
-   RTDB-based presence channel.
-9. **Read receipts and delivery webhooks**, message reactions, replies.
-10. **End-to-end encryption** for sensitive workspaces (libsodium-based).
+1. **SMS fallback** — when the recipient is offline beyond a threshold,
+   queue the message and deliver via carrier SMS (Twilio / local
+   gateway). A Cloud Function listens to message writes and routes.
+2. **Broadcast lists** — pick multiple contacts, send one message that
+   fans out into per-recipient 1:1 conversations.
+3. **Scheduled messages / reminders** — `reminders/{uid}/items/{id}`
+   with `nextRunAt`, processed by a scheduled Cloud Function.
+4. **Contact labels / segments** — extend `contacts/{uid}/list/*` with
+   `labels: string[]` plus a `segments` collection per user.
+5. **Marketing campaigns** — `campaigns` collection with target
+   segments, scheduling, analytics aggregations.
+6. **Staff / customer workflows** — workspace concept and a role
+   attribute on `users`. Staff get assigned to customer threads.
+7. **Admin dashboard** — separate web app reading the same Firestore
+   data with admin-claim-gated rules.
+8. **Typing indicator UI** (data layer already shipped — wiring screen
+   subscriptions is small).
+9. **Reply-to-message and reactions UI** (data layer shipped).
+10. **End-to-end encryption** for sensitive workspaces.
 
-The codebase is structured so each of these can land as a new service module
-under `src/services/` and a screen under `src/screens/` without churning the
-core chat code.
+The codebase is structured so each of these can land as a new service
+module under `src/services/`, a hook under `src/hooks/`, and a screen
+under `src/screens/` without churning the core chat code.
 
 ---
 
-## 10. Notes & caveats
+## 9. Notes & caveats
 
-- **WhatsApp OTP** is implemented entirely through Cloud Functions calling
-  Meta's WhatsApp Cloud API. The OTP itself is never readable by the client:
-  only a salted SHA-256 hash is persisted in `otpRequests/{phoneNumber}`,
-  with attempt and resend rate limits enforced server-side. After
-  verification the function mints a Firebase Custom Token so the rest of the
-  app sees a normal Firebase user and the existing Firestore rules apply
-  unchanged.
-- **No SMS fallback ships in the UI.** If a user doesn't have WhatsApp on
-  their phone number they cannot sign in. To add SMS later, re-enable Phone
-  Auth in the Firebase console and add a "Use SMS instead" link on
-  `PhoneLoginScreen`.
-- The WhatsApp `otp_login` template must be approved by Meta before OTPs
-  will deliver. Approval usually takes <1 hour for authentication templates.
-- Push notifications register a device token via `expo-notifications`. To
-  fan-out actual pushes, deploy a small Cloud Function that listens to new
-  message writes and sends FCM payloads to the recipient's `fcmToken`.
-- The `/assets` icon and splash files are not committed (only branded SVG
-  logo is in-code). Drop in your final PNGs before publishing.
+- **Email/password auth** is what's currently enabled. If you want
+  phone-number auth later, re-enable the Phone provider in the Firebase
+  Console and bring back a phone-auth flow. The previous WhatsApp OTP
+  Cloud Function is no longer in the repo (see commit history if you
+  want to reconstruct it).
+- **Push notifications** register a device token via
+  `notificationService.register`. To actually deliver pushes, add a
+  Cloud Function that listens to message writes and sends FCM payloads
+  to the recipient's `fcmToken`.
+- **`/assets`** isn't checked in. Drop your real `icon.png`,
+  `splash.png`, `adaptive-icon.png`, and `favicon.png` before
+  prebuilding for release.

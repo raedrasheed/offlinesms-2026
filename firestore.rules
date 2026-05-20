@@ -278,12 +278,5 @@ service cloud.firestore {
     match /notifications/{uid}/items/{notifId} {
       allow read, write: if isSelf(uid);
     }
-
-    // --- otpRequests (server-only) ----------------------------------------
-    // OTP material lives here. The admin SDK in Cloud Functions bypasses
-    // these rules; clients are denied entirely.
-    match /otpRequests/{phoneNumber} {
-      allow read, write: if false;
-    }
   }
 }
