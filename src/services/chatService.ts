@@ -1,27 +1,34 @@
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
-  getDocs,
+  increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
-  updateDoc,
-  where,
-  arrayUnion,
-  increment,
-  writeBatch,
   Timestamp,
   Unsubscribe,
+  updateDoc,
+  where,
+  writeBatch,
 } from 'firebase/firestore';
-import { db } from '@/firebase/config';
+import { db, storage } from '@/firebase/config';
 import { Collections } from '@/firebase/collections';
-import { Chat, ChatMessage, MessageStatus } from '@/types/models';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Chat, ChatMessage, MessageStatus, ReplyPreview } from '@/types/models';
 
 const chatIdFor = (a: string, b: string) => [a, b].sort().join('_');
+
+const previewFromMessage = (m: Pick<ChatMessage, 'text' | 'type'>) => {
+  if (m.type === 'image') return '📷 Photo';
+  return m.text.length > 60 ? m.text.slice(0, 57) + '…' : m.text;
+};
 
 export const ChatService = {
   async getOrCreateOneToOneChat(currentUid: string, otherUid: string): Promise<string> {
@@ -36,20 +43,24 @@ export const ChatService = {
         lastMessageAt: null,
         lastMessageSenderId: '',
         unread: { [currentUid]: 0, [otherUid]: 0 },
+        pinnedBy: [],
+        mutedBy: [],
+        archivedBy: [],
       });
     }
     return chatId;
   },
 
   listenToUserChats(uid: string, cb: (chats: Chat[]) => void): Unsubscribe {
-    // No orderBy so Firestore doesn't require a composite index;
-    // sort client-side after the snapshot arrives.
     const q = query(collection(db, Collections.chats), where('members', 'array-contains', uid));
     return onSnapshot(
       q,
       (snap) => {
         const chats: Chat[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         chats.sort((a, b) => {
+          const aPinned = a.pinnedBy?.includes(uid) ? 1 : 0;
+          const bPinned = b.pinnedBy?.includes(uid) ? 1 : 0;
+          if (aPinned !== bPinned) return bPinned - aPinned;
           const at = a.lastMessageAt?.toMillis?.() ?? 0;
           const bt = b.lastMessageAt?.toMillis?.() ?? 0;
           return bt - at;
@@ -78,7 +89,12 @@ export const ChatService = {
     });
   },
 
-  async sendMessage(chatId: string, senderId: string, text: string) {
+  async sendMessage(
+    chatId: string,
+    senderId: string,
+    text: string,
+    options?: { replyTo?: ReplyPreview | null },
+  ) {
     const chatRef = doc(db, Collections.chats, chatId);
     const chatSnap = await getDoc(chatRef);
     if (!chatSnap.exists()) throw new Error('Chat not found');
@@ -94,6 +110,7 @@ export const ChatService = {
         createdAt: serverTimestamp(),
         status: 'sent' as MessageStatus,
         readBy: [senderId],
+        replyTo: options?.replyTo ?? null,
       },
     );
 
@@ -103,13 +120,52 @@ export const ChatService = {
     });
 
     await updateDoc(chatRef, {
-      lastMessage: text,
+      lastMessage: previewFromMessage({ text, type: 'text' }),
       lastMessageAt: serverTimestamp(),
       lastMessageSenderId: senderId,
       ...unreadUpdate,
+      // sending a message brings the chat back from archive for both parties
+      archivedBy: [],
     });
 
     return msgRef.id;
+  },
+
+  async sendImage(chatId: string, senderId: string, localUri: string) {
+    const res = await fetch(localUri);
+    const blob = await res.blob();
+    const name = `${Date.now()}_${senderId}.jpg`;
+    const ref = storageRef(storage, `chats/${chatId}/${senderId}/${name}`);
+    await uploadBytes(ref, blob, { contentType: 'image/jpeg' });
+    const url = await getDownloadURL(ref);
+
+    const chatRef = doc(db, Collections.chats, chatId);
+    const chatSnap = await getDoc(chatRef);
+    const members: string[] = (chatSnap.data() as any)?.members ?? [];
+    const others = members.filter((m) => m !== senderId);
+
+    await addDoc(collection(db, Collections.chats, chatId, Collections.messages), {
+      senderId,
+      text: '',
+      type: 'image',
+      attachmentURL: url,
+      createdAt: serverTimestamp(),
+      status: 'sent' as MessageStatus,
+      readBy: [senderId],
+      replyTo: null,
+    });
+
+    const unreadUpdate: Record<string, any> = {};
+    others.forEach((uid) => {
+      unreadUpdate[`unread.${uid}`] = increment(1);
+    });
+    await updateDoc(chatRef, {
+      lastMessage: '📷 Photo',
+      lastMessageAt: serverTimestamp(),
+      lastMessageSenderId: senderId,
+      ...unreadUpdate,
+      archivedBy: [],
+    });
   },
 
   async markAsRead(chatId: string, uid: string, messageIds: string[]) {
@@ -123,8 +179,37 @@ export const ChatService = {
   },
 
   async deleteMessage(chatId: string, messageId: string) {
-    const { deleteDoc } = await import('firebase/firestore');
     await deleteDoc(doc(db, Collections.chats, chatId, Collections.messages, messageId));
+  },
+
+  async togglePin(chatId: string, uid: string, on: boolean) {
+    await updateDoc(doc(db, Collections.chats, chatId), {
+      pinnedBy: on ? arrayUnion(uid) : arrayRemove(uid),
+    });
+  },
+
+  async toggleMute(chatId: string, uid: string, on: boolean) {
+    await updateDoc(doc(db, Collections.chats, chatId), {
+      mutedBy: on ? arrayUnion(uid) : arrayRemove(uid),
+    });
+  },
+
+  async toggleArchive(chatId: string, uid: string, on: boolean) {
+    await updateDoc(doc(db, Collections.chats, chatId), {
+      archivedBy: on ? arrayUnion(uid) : arrayRemove(uid),
+    });
+  },
+
+  async toggleReaction(chatId: string, messageId: string, uid: string, emoji: string) {
+    const mref = doc(db, Collections.chats, chatId, Collections.messages, messageId);
+    const snap = await getDoc(mref);
+    const data = snap.data() as any;
+    const current: string[] = data?.reactions?.[emoji] ?? [];
+    const has = current.includes(uid);
+    const next = has ? current.filter((u) => u !== uid) : [...current, uid];
+    await updateDoc(mref, {
+      [`reactions.${emoji}`]: next,
+    });
   },
 };
 
@@ -142,3 +227,11 @@ export const formatChatTime = (ts?: Timestamp | null): string => {
   }
   return date.toLocaleDateString();
 };
+
+export const buildReplyPreview = (m: ChatMessage, senderName?: string): ReplyPreview => ({
+  messageId: m.id,
+  senderId: m.senderId,
+  senderName,
+  snippet: m.type === 'image' ? '📷 Photo' : (m.text.length > 80 ? m.text.slice(0, 77) + '…' : m.text),
+  type: m.type,
+});

@@ -1,22 +1,23 @@
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
+  Unsubscribe,
   updateDoc,
   where,
-  Unsubscribe,
-  setDoc,
-  arrayUnion,
-  arrayRemove,
 } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { Collections } from '@/firebase/collections';
-import { ChatMessage, Group, MessageStatus } from '@/types/models';
+import { ChatMessage, Group, MessageStatus, ReplyPreview } from '@/types/models';
 
 export const GroupService = {
   async createGroup(params: {
@@ -34,6 +35,8 @@ export const GroupService = {
       createdAt: serverTimestamp(),
       lastMessage: '',
       lastMessageAt: null,
+      pinnedBy: [],
+      mutedBy: [],
     });
     return ref.id;
   },
@@ -45,6 +48,9 @@ export const GroupService = {
       (snap) => {
         const groups: Group[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         groups.sort((a, b) => {
+          const aPinned = a.pinnedBy?.includes(uid) ? 1 : 0;
+          const bPinned = b.pinnedBy?.includes(uid) ? 1 : 0;
+          if (aPinned !== bPinned) return bPinned - aPinned;
           const at = a.lastMessageAt?.toMillis?.() ?? 0;
           const bt = b.lastMessageAt?.toMillis?.() ?? 0;
           return bt - at;
@@ -73,7 +79,12 @@ export const GroupService = {
     });
   },
 
-  async sendGroupMessage(groupId: string, senderId: string, text: string) {
+  async sendGroupMessage(
+    groupId: string,
+    senderId: string,
+    text: string,
+    options?: { replyTo?: ReplyPreview | null },
+  ) {
     const ref = await addDoc(
       collection(db, Collections.groups, groupId, Collections.groupMessages),
       {
@@ -83,10 +94,11 @@ export const GroupService = {
         createdAt: serverTimestamp(),
         status: 'sent' as MessageStatus,
         readBy: [senderId],
+        replyTo: options?.replyTo ?? null,
       },
     );
     await updateDoc(doc(db, Collections.groups, groupId), {
-      lastMessage: text,
+      lastMessage: text.length > 60 ? text.slice(0, 57) + '…' : text,
       lastMessageAt: serverTimestamp(),
       lastMessageSenderId: senderId,
     });
@@ -112,7 +124,27 @@ export const GroupService = {
   },
 
   async deleteGroupMessage(groupId: string, messageId: string) {
-    const { deleteDoc } = await import('firebase/firestore');
     await deleteDoc(doc(db, Collections.groups, groupId, Collections.groupMessages, messageId));
+  },
+
+  async togglePin(groupId: string, uid: string, on: boolean) {
+    await updateDoc(doc(db, Collections.groups, groupId), {
+      pinnedBy: on ? arrayUnion(uid) : arrayRemove(uid),
+    });
+  },
+
+  async toggleMute(groupId: string, uid: string, on: boolean) {
+    await updateDoc(doc(db, Collections.groups, groupId), {
+      mutedBy: on ? arrayUnion(uid) : arrayRemove(uid),
+    });
+  },
+
+  async toggleReaction(groupId: string, messageId: string, uid: string, emoji: string) {
+    const mref = doc(db, Collections.groups, groupId, Collections.groupMessages, messageId);
+    const snap = await getDoc(mref);
+    const current: string[] = (snap.data() as any)?.reactions?.[emoji] ?? [];
+    const has = current.includes(uid);
+    const next = has ? current.filter((u) => u !== uid) : [...current, uid];
+    await updateDoc(mref, { [`reactions.${emoji}`]: next });
   },
 };
