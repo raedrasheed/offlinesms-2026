@@ -200,16 +200,34 @@ export const ChatService = {
     });
   },
 
+  /**
+   * Set or toggle the viewer's reaction on a message.
+   *   - Tapping the same emoji again removes it (toggle off).
+   *   - Tapping a different emoji replaces the previous reaction.
+   *   - One updateDoc call so the swap is atomic on the server.
+   */
   async toggleReaction(chatId: string, messageId: string, uid: string, emoji: string) {
     const mref = doc(db, Collections.chats, chatId, Collections.messages, messageId);
     const snap = await getDoc(mref);
-    const data = snap.data() as any;
-    const current: string[] = data?.reactions?.[emoji] ?? [];
-    const has = current.includes(uid);
-    const next = has ? current.filter((u) => u !== uid) : [...current, uid];
-    await updateDoc(mref, {
-      [`reactions.${emoji}`]: next,
-    });
+    const reactions: Record<string, string[]> =
+      (snap.data() as any)?.reactions ?? {};
+
+    const update: Record<string, string[]> = {};
+    const userHasThisEmoji = (reactions[emoji] ?? []).includes(uid);
+
+    if (userHasThisEmoji) {
+      update[`reactions.${emoji}`] = (reactions[emoji] ?? []).filter((u) => u !== uid);
+    } else {
+      Object.keys(reactions).forEach((e) => {
+        if (e !== emoji && (reactions[e] ?? []).includes(uid)) {
+          update[`reactions.${e}`] = (reactions[e] ?? []).filter((u) => u !== uid);
+        }
+      });
+      update[`reactions.${emoji}`] = [...(reactions[emoji] ?? []), uid];
+    }
+
+    if (Object.keys(update).length === 0) return;
+    await updateDoc(mref, update);
   },
 };
 

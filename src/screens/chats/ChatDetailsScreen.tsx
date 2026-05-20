@@ -27,6 +27,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePresence } from '@/hooks/usePresence';
 import { useTypingOthers } from '@/hooks/useTypingOthers';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
+import { useChatActions } from '@/hooks/useChatActions';
 import { PresenceService } from '@/services/presenceService';
 import { ChatMessage, ReplyPreview } from '@/types/models';
 import { AppStackParamList } from '@/navigation/types';
@@ -61,6 +62,7 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const { chatId, title, photoURL, otherUid } = route.params;
   const { user, profile } = useAuth();
+  const actions = useChatActions();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const other = usePresence(otherUid);
   const typingUids = useTypingOthers(chatId, user?.uid);
@@ -75,6 +77,16 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     if (m.senderId === user?.uid) return profile?.displayName?.trim() || 'You';
     if (m.senderId === otherUid) return other?.displayName?.trim() || title || 'Contact';
     return 'OfflineSMS user';
+  };
+
+  /** Returns the emoji the current viewer has reacted with on a message,
+   *  or null if none. */
+  const myReactionFor = (m: ChatMessage): string | null => {
+    if (!user || !m.reactions) return null;
+    for (const [emoji, uids] of Object.entries(m.reactions)) {
+      if (uids.includes(user.uid)) return emoji;
+    }
+    return null;
   };
 
   useEffect(() => {
@@ -225,9 +237,13 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
                     createdAt={item.data.createdAt}
                     status={item.data.status}
                     replyTo={item.data.replyTo}
+                    myReaction={myReactionFor(item.data)}
                     onDelete={() => onDeleteMessage(item.data.id)}
                     onReply={() =>
                       setReplyTo(buildReplyPreview(item.data, senderNameFor(item.data)))
+                    }
+                    onReact={(emoji) =>
+                      actions.react(chatId, item.data.id, emoji, false).catch(() => {})
                     }
                   />
                 )

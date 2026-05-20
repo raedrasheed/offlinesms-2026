@@ -139,12 +139,28 @@ export const GroupService = {
     });
   },
 
+  /** Same replace-or-toggle semantics as ChatService.toggleReaction. */
   async toggleReaction(groupId: string, messageId: string, uid: string, emoji: string) {
     const mref = doc(db, Collections.groups, groupId, Collections.groupMessages, messageId);
     const snap = await getDoc(mref);
-    const current: string[] = (snap.data() as any)?.reactions?.[emoji] ?? [];
-    const has = current.includes(uid);
-    const next = has ? current.filter((u) => u !== uid) : [...current, uid];
-    await updateDoc(mref, { [`reactions.${emoji}`]: next });
+    const reactions: Record<string, string[]> =
+      (snap.data() as any)?.reactions ?? {};
+
+    const update: Record<string, string[]> = {};
+    const userHasThisEmoji = (reactions[emoji] ?? []).includes(uid);
+
+    if (userHasThisEmoji) {
+      update[`reactions.${emoji}`] = (reactions[emoji] ?? []).filter((u) => u !== uid);
+    } else {
+      Object.keys(reactions).forEach((e) => {
+        if (e !== emoji && (reactions[e] ?? []).includes(uid)) {
+          update[`reactions.${e}`] = (reactions[e] ?? []).filter((u) => u !== uid);
+        }
+      });
+      update[`reactions.${emoji}`] = [...(reactions[emoji] ?? []), uid];
+    }
+
+    if (Object.keys(update).length === 0) return;
+    await updateDoc(mref, update);
   },
 };

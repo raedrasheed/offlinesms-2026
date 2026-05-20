@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
+  GestureResponderEvent,
   Platform,
   Pressable,
   StyleSheet,
@@ -11,7 +12,9 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import * as Clipboard from 'expo-clipboard';
 import { Timestamp } from 'firebase/firestore';
+import { useRef } from 'react';
 import ReplyPreviewBar from './ReplyPreviewBar';
+import ReactionStrip, { DEFAULT_REACTIONS, ReactionAnchor } from './ReactionStrip';
 import { colors, radius, spacing } from '@/theme';
 import { MessageStatus, ReplyPreview } from '@/types/models';
 
@@ -21,14 +24,14 @@ interface Props {
   createdAt?: Timestamp | null;
   status?: MessageStatus;
   showSenderName?: string;
-  /** When the message was sent as a reply, render the quoted card
-   *  inside the bubble above the text. */
   replyTo?: ReplyPreview | null;
+  /** Emoji the current viewer has reacted with, if any. Highlighted in
+   *  the reaction strip so it reads as a toggle target. */
+  myReaction?: string | null;
   onDelete?: () => void;
-  /** Triggered when the user swipes the bubble to the right past the
-   *  reply threshold. The screen is expected to populate the composer
-   *  reply preview. */
   onReply?: () => void;
+  /** Called when the viewer picks an emoji from the long-press strip. */
+  onReact?: (emoji: string) => void;
 }
 
 const formatTime = (ts?: Timestamp | null) =>
@@ -57,17 +60,20 @@ const MessageBubble: React.FC<Props> = ({
   status,
   showSenderName,
   replyTo,
+  myReaction,
   onDelete,
   onReply,
+  onReact,
 }) => {
   const [pressed, setPressed] = useState(false);
+  const [stripAnchor, setStripAnchor] = useState<ReactionAnchor | null>(null);
   const swipeRef = useRef<Swipeable>(null);
 
   const copy = async () => {
     await Clipboard.setStringAsync(text);
   };
 
-  const onLongPress = () => {
+  const openActions = () => {
     const canDelete = !!onDelete && outgoing;
     const canReply = !!onReply;
     const options = [
@@ -104,13 +110,18 @@ const MessageBubble: React.FC<Props> = ({
     Alert.alert('Message', text.length > 80 ? text.slice(0, 77) + '…' : text, buttons);
   };
 
-  const handleSwipeOpen = (direction: 'left' | 'right') => {
-    // Swipeable fires `left` when the LEFT actions are revealed, which
-    // happens on a swipe to the right — exactly the gesture we want.
-    if (direction === 'left' && onReply) {
-      onReply();
+  const onLongPress = (e: GestureResponderEvent) => {
+    if (onReact) {
+      const { pageX, pageY } = e.nativeEvent;
+      setStripAnchor({ x: pageX, y: pageY });
+      return;
     }
-    // Close immediately; we don't want a sticky reveal.
+    // No reactions wired — fall back to the actions sheet directly.
+    openActions();
+  };
+
+  const handleSwipeOpen = (direction: 'left' | 'right') => {
+    if (direction === 'left' && onReply) onReply();
     swipeRef.current?.close();
   };
 
@@ -161,6 +172,17 @@ const MessageBubble: React.FC<Props> = ({
       ) : (
         bubbleContent
       )}
+
+      <ReactionStrip
+        visible={!!stripAnchor}
+        anchor={stripAnchor}
+        alignRight={outgoing}
+        selected={myReaction ?? undefined}
+        emojis={DEFAULT_REACTIONS}
+        onSelect={(emoji) => onReact?.(emoji)}
+        onMore={openActions}
+        onDismiss={() => setStripAnchor(null)}
+      />
     </View>
   );
 };
@@ -184,9 +206,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   outgoing: { backgroundColor: colors.bubbleOutgoing },
-  incoming: {
-    backgroundColor: colors.bubbleIncoming,
-  },
+  incoming: { backgroundColor: colors.bubbleIncoming },
   outgoingTail: { borderBottomRightRadius: 4 },
   incomingTail: { borderBottomLeftRadius: 4 },
   text: { fontSize: 15, color: colors.textPrimary, lineHeight: 20 },
