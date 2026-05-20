@@ -127,6 +127,30 @@ Run with two test accounts on two devices (A on emulator, B on a real phone or s
 | U15 | Sign out from B's device | B's `lastSeen` stops updating; after 2 min A's dot for B disappears and subtitle reflects the timestamp |
 | U16 | New peer with no `lastSeen` field (e.g., a brand-new email signup not yet heart-beat) | Avatar shows no dot; chat header subtitle is empty (neutral fallback, never fakes "online") |
 
+### Typing indicator
+
+Two-device test (A and B). Use the same setup as the presence checks.
+
+| # | Step | Expected |
+| -- | ---- | -------- |
+| U17 | Both devices open the same chat. A starts typing in the composer. | Within ~1s, B's chat header subtitle changes to **"typing…"**. The previous "online" / "last seen" text is overridden while typing is fresh. |
+| U18 | A pauses for >3 s without typing. | B's subtitle reverts to **"online"** (or "last seen …" if the threshold has passed). The `typing/{chatId}/users/{A.uid}` doc is deleted by the hook's auto-clear timer. |
+| U19 | A types a message, then taps send. | B's subtitle clears to presence text **immediately** (no 3 s lag) because `onSend` calls `PresenceService.setTyping(false)` synchronously before awaiting the message write. |
+| U20 | A backgrounds the app while typing. | B's "typing…" label drops within 4 s as the stale doc is filtered out by `useTypingOthers`. Re-opening A's app does not leak a stale typing state because the hook also cleans up on unmount. |
+| U21 | B has presence info missing (e.g. brand-new account). A types. | B's subtitle still shows "typing…" while A is typing. When A stops, the subtitle becomes empty (neutral fallback — no fake "online"). |
+
+### Reply-to-message
+
+| # | Step | Expected |
+| -- | ---- | -------- |
+| U22 | Long-press any message in a chat. | Action sheet shows **Reply / Copy / [Delete] / Cancel** (Delete only on your own messages). Tap Reply. |
+| U23 | Swipe **right** on any bubble. | A small primary-color circle with a ↩ glyph slides in from the left. Release past ~48 px to fire the reply action; release before that snaps back without firing. |
+| U24 | After either gesture, look at the area above the composer. | A quoted card appears: vertical primary-color accent on the left, sender name (yours for outgoing messages, peer's for incoming), and a one-line snippet (or "📷 Photo" if the original was an image). An "x" button on the right cancels. |
+| U25 | Tap the "x" button. | The quoted card disappears; the composer returns to its normal state. No message is sent. |
+| U26 | With the reply preview visible, type and tap Send. | The new message lands in Firestore with `replyTo: { messageId, senderId, senderName, snippet, type }`. The composer preview clears. The new bubble renders with the same quoted card inlined inside it above the message text. |
+| U27 | Receive a reply from peer B on device A. | A's incoming bubble shows the inline reply card. Both your own outgoing and the peer's incoming bubbles render the same inline quoted layout. |
+| U28 | Try to overwrite `replyTo` on an existing message via the Firestore console (e.g. set it to a different object). | **Rejected** by the message-update rule which makes `replyTo` immutable post-create. |
+
 ## TypeScript / build check
 
 ```powershell

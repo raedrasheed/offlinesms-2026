@@ -159,6 +159,7 @@ const GroupChatScreen: React.FC<Props> = ({ navigation, route }) => {
                         ? senders[item.data.senderId]?.displayName
                         : undefined
                     }
+                    replyTo={item.data.replyTo}
                     onDelete={() => GroupService.deleteGroupMessage(groupId, item.data.id).catch(() => {})}
                   />
                 )

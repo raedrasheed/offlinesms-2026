@@ -224,6 +224,7 @@ const ChatDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
                     outgoing={item.data.senderId === user?.uid}
                     createdAt={item.data.createdAt}
                     status={item.data.status}
+                    replyTo={item.data.replyTo}
                     onDelete={() => onDeleteMessage(item.data.id)}
                     onReply={() =>
                       setReplyTo(buildReplyPreview(item.data, senderNameFor(item.data)))

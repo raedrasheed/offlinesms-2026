@@ -11,8 +11,9 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import * as Clipboard from 'expo-clipboard';
 import { Timestamp } from 'firebase/firestore';
+import ReplyPreviewBar from './ReplyPreviewBar';
 import { colors, radius, spacing } from '@/theme';
-import { MessageStatus } from '@/types/models';
+import { MessageStatus, ReplyPreview } from '@/types/models';
 
 interface Props {
   text: string;
@@ -20,6 +21,9 @@ interface Props {
   createdAt?: Timestamp | null;
   status?: MessageStatus;
   showSenderName?: string;
+  /** When the message was sent as a reply, render the quoted card
+   *  inside the bubble above the text. */
+  replyTo?: ReplyPreview | null;
   onDelete?: () => void;
   /** Triggered when the user swipes the bubble to the right past the
    *  reply threshold. The screen is expected to populate the composer
@@ -52,6 +56,7 @@ const MessageBubble: React.FC<Props> = ({
   createdAt,
   status,
   showSenderName,
+  replyTo,
   onDelete,
   onReply,
 }) => {
@@ -125,6 +130,7 @@ const MessageBubble: React.FC<Props> = ({
       {showSenderName && !outgoing && (
         <Text style={styles.senderName}>{showSenderName}</Text>
       )}
+      {replyTo && <ReplyPreviewBar reply={replyTo} variant="inline" />}
       <Text style={styles.text}>{text}</Text>
       <View style={styles.meta}>
         <Text style={styles.time}>{formatTime(createdAt)}</Text>
