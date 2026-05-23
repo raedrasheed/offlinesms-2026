@@ -5,17 +5,19 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from '@/hooks/useAuth';
 import RootNavigator from '@/navigation/RootNavigator';
-import { colors } from '@/theme';
 
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <StatusBar style="light" backgroundColor={colors.primary} />
+          {/* Dark icons over the light app background; the screen draws
+              behind the status bar via safe-area insets. */}
+          <StatusBar style="dark" translucent backgroundColor="transparent" />
           <RootNavigator />
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
+

@@ -16,7 +16,7 @@ import { Timestamp } from 'firebase/firestore';
 import ChatListItem from '@/components/ChatListItem';
 import EmptyState from '@/components/EmptyState';
 import Loader from '@/components/Loader';
-import { CameraIcon, SearchIcon, ComposeIcon } from '@/components/Icons';
+import { SearchIcon, ComposeIcon } from '@/components/Icons';
 import { colors, radii, shadow, spacing, typography } from '@/theme';
 import { UserService } from '@/services/userService';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,7 +32,7 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<AppStackParamList>
 >;
 
-type Filter = 'all' | 'unread' | 'favorites' | 'groups';
+type Filter = 'all' | 'unread' | 'favorites' | 'groups' | 'archived';
 
 interface Conversation {
   id: string;
@@ -44,6 +44,7 @@ interface Conversation {
   unread: number;
   pinned: boolean;
   muted: boolean;
+  archived: boolean;
   online: boolean;
   sentByMe: boolean;
   colorSeed: string;
@@ -60,7 +61,6 @@ const ChatsScreen: React.FC<Props> = () => {
   const actions = useChatActions();
   const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
   const [filter, setFilter] = useState<Filter>('all');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Fetch peer profiles for 1:1 chats (name + avatar + presence).
@@ -82,7 +82,6 @@ const ChatsScreen: React.FC<Props> = () => {
     const out: Conversation[] = [];
 
     (chats ?? []).forEach((c) => {
-      if (c.archivedBy?.includes(user.uid)) return; // hide archived
       const peerUid = c.members.find((m) => m !== user.uid) ?? '';
       const peer = profiles[peerUid];
       out.push({
@@ -95,6 +94,7 @@ const ChatsScreen: React.FC<Props> = () => {
         unread: c.unread?.[user.uid] ?? 0,
         pinned: !!c.pinnedBy?.includes(user.uid),
         muted: !!c.mutedBy?.includes(user.uid),
+        archived: !!c.archivedBy?.includes(user.uid),
         online: isOnline(peer?.lastSeen),
         sentByMe: c.lastMessageSenderId === user.uid,
         colorSeed: peerUid,
@@ -115,6 +115,7 @@ const ChatsScreen: React.FC<Props> = () => {
         unread: 0,
         pinned: !!g.pinnedBy?.includes(user.uid),
         muted: !!g.mutedBy?.includes(user.uid),
+        archived: false,
         online: false,
         sentByMe: false,
         colorSeed: g.id,
@@ -132,15 +133,22 @@ const ChatsScreen: React.FC<Props> = () => {
   }, [chats, groups, profiles, user]);
 
   const totalUnread = useMemo(
-    () => conversations.reduce((sum, c) => sum + c.unread, 0),
+    () => conversations.filter((c) => !c.archived).reduce((sum, c) => sum + c.unread, 0),
     [conversations],
   );
 
   const visible = useMemo(() => {
-    let list = conversations;
-    if (filter === 'unread') list = list.filter((c) => c.unread > 0);
-    else if (filter === 'favorites') list = list.filter((c) => c.pinned);
-    else if (filter === 'groups') list = list.filter((c) => c.isGroup);
+    let list: Conversation[];
+    if (filter === 'archived') {
+      list = conversations.filter((c) => c.archived);
+    } else {
+      // All non-archived buckets start by excluding archived chats.
+      const active = conversations.filter((c) => !c.archived);
+      if (filter === 'unread') list = active.filter((c) => c.unread > 0);
+      else if (filter === 'favorites') list = active.filter((c) => c.pinned);
+      else if (filter === 'groups') list = active.filter((c) => c.isGroup);
+      else list = active;
+    }
 
     const q = searchTerm.toLowerCase().trim();
     if (q) {
@@ -182,8 +190,8 @@ const ChatsScreen: React.FC<Props> = () => {
     ];
     if (!c.isGroup) {
       buttons.push({
-        text: 'Archive',
-        onPress: () => actions.archive(c.source as Chat, true).catch(() => {}),
+        text: c.archived ? 'Unarchive' : 'Archive',
+        onPress: () => actions.archive(c.source as Chat, !c.archived).catch(() => {}),
       });
     }
     buttons.push({ text: 'Cancel', style: 'cancel' });
@@ -192,50 +200,36 @@ const ChatsScreen: React.FC<Props> = () => {
 
   if (!chats || !groups) return <Loader />;
 
+  const archivedCount = conversations.filter((c) => c.archived).length;
   const filters: { key: Filter; label: string; count?: number }[] = [
     { key: 'all', label: 'All' },
     { key: 'unread', label: 'Unread', count: totalUnread },
     { key: 'favorites', label: 'Favorites' },
     { key: 'groups', label: 'Groups' },
+    ...(archivedCount > 0 ? [{ key: 'archived' as Filter, label: 'Archived' }] : []),
   ];
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Text style={styles.headerTitle}>Chats</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
-            <CameraIcon size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            activeOpacity={0.7}
-            onPress={() => {
-              setSearchOpen((v) => {
-                if (v) setSearchTerm('');
-                return !v;
-              });
-            }}
-          >
-            <SearchIcon size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+      <View style={[styles.header, { paddingTop: insets.top + 2 }]}>
+        <Text style={styles.headerTitle}>OfflineSMS</Text>
       </View>
 
-      {searchOpen && (
-        <View style={styles.searchWrap}>
+      {/* Always-visible search field directly under the title */}
+      <View style={styles.searchWrap}>
+        <View style={styles.searchField}>
+          <SearchIcon size={18} color={colors.textMuted} />
           <TextInput
             value={searchTerm}
             onChangeText={setSearchTerm}
             placeholder="Search"
             placeholderTextColor={colors.textMuted}
             style={styles.searchInput}
-            autoFocus
             autoCapitalize="none"
           />
         </View>
-      )}
+      </View>
 
       {/* Filter pills */}
       <View style={styles.pillsRow}>
@@ -315,33 +309,29 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
   },
-  headerTitle: { ...typography.display, color: colors.textPrimary },
-  headerActions: { flexDirection: 'row', gap: spacing.md },
-  iconBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated,
+  headerTitle: { ...typography.display, color: colors.primary },
+  searchWrap: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  searchField: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.card,
-  },
-  searchWrap: { paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  searchInput: {
+    gap: spacing.sm,
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.lg,
+    ...shadow.card,
+  },
+  searchInput: {
+    flex: 1,
     paddingVertical: 10,
     fontSize: 15,
     color: colors.textPrimary,
-    ...shadow.card,
   },
   pillsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
@@ -353,10 +343,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radii.pill,
     gap: 6,
+    borderWidth: 1.5,
   },
-  pillActive: { backgroundColor: colors.primaryDark },
-  pillIdle: { backgroundColor: colors.surfaceElevated, ...shadow.card },
-  pillText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  pillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  pillIdle: { backgroundColor: 'transparent', borderColor: '#C2CBD4' },
+  pillText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   pillTextActive: { color: colors.textOnPrimary },
   pillBadge: {
     backgroundColor: colors.primary,
@@ -369,7 +360,7 @@ const styles = StyleSheet.create({
   },
   pillBadgeActive: { backgroundColor: colors.surfaceElevated },
   pillBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  pillBadgeTextActive: { color: colors.primaryDark },
+  pillBadgeTextActive: { color: colors.primary },
   divider: { height: 1, backgroundColor: colors.divider, marginLeft: 88 },
   fab: {
     position: 'absolute',
