@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Avatar from './Avatar';
-import { PinIcon, MuteIcon } from './Icons';
+import { PinIcon, MuteIcon, DoubleCheckIcon } from './Icons';
 import { colors, radii, spacing } from '@/theme';
 import { formatChatTime } from '@/services/chatService';
 import { Timestamp } from 'firebase/firestore';
@@ -15,6 +15,12 @@ interface Props {
   pinned?: boolean;
   muted?: boolean;
   online?: boolean;
+  /** Prefix the preview with a read double-tick (last message was ours). */
+  sentByMe?: boolean;
+  /** Replace the preview with an italic "Typing…" label. */
+  typing?: boolean;
+  /** Seed for the deterministic avatar color (uid or id). */
+  colorSeed?: string;
   onPress: () => void;
   onLongPress?: () => void;
 }
@@ -28,9 +34,13 @@ const ChatListItem: React.FC<Props> = ({
   pinned = false,
   muted = false,
   online = false,
+  sentByMe = false,
+  typing = false,
+  colorSeed,
   onPress,
   onLongPress,
 }) => {
+  const hasUnread = unread > 0;
   return (
     <Pressable
       onPress={onPress}
@@ -39,37 +49,50 @@ const ChatListItem: React.FC<Props> = ({
       android_ripple={{ color: colors.pressedTint }}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <Avatar uri={photoURL ?? undefined} name={title} size={52} online={online} />
+      <Avatar
+        uri={photoURL ?? undefined}
+        name={title}
+        size={56}
+        online={online}
+        colorSeed={colorSeed}
+      />
+
       <View style={styles.middle}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          {muted && (
-            <View style={styles.titleIcon}>
-              <MuteIcon size={13} color={colors.textMuted} />
-            </View>
-          )}
-        </View>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {subtitle || 'No messages yet'}
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
         </Text>
+
+        {typing ? (
+          <Text style={styles.typing} numberOfLines={1}>
+            Typing…
+          </Text>
+        ) : (
+          <View style={styles.previewRow}>
+            {sentByMe && !hasUnread && (
+              <View style={styles.tick}>
+                <DoubleCheckIcon size={16} color={colors.tickRead} />
+              </View>
+            )}
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle || 'No messages yet'}
+            </Text>
+          </View>
+        )}
       </View>
+
       <View style={styles.right}>
-        <Text style={[styles.time, unread > 0 && styles.timeActive]}>
+        <Text style={[styles.time, hasUnread && styles.timeActive]}>
           {formatChatTime(time)}
         </Text>
         <View style={styles.rightBottom}>
-          {pinned && (
-            <View style={styles.pinSlot}>
-              <PinIcon size={12} color={colors.textMuted} />
-            </View>
-          )}
-          {unread > 0 && (
-            <View style={[styles.badge, muted && styles.badgeMuted]}>
+          {muted && <MuteIcon size={16} color={colors.textMuted} />}
+          {hasUnread ? (
+            <View style={styles.badge}>
               <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
             </View>
-          )}
+          ) : pinned && !muted ? (
+            <PinIcon size={13} color={colors.textMuted} />
+          ) : null}
         </View>
       </View>
     </Pressable>
@@ -80,32 +103,42 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
-    backgroundColor: colors.background,
+    backgroundColor: 'transparent',
   },
   rowPressed: { backgroundColor: colors.pressedTint },
-  middle: { flex: 1, marginHorizontal: spacing.md },
-  titleRow: { flexDirection: 'row', alignItems: 'center' },
-  title: { fontSize: 16, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },
-  titleIcon: { marginLeft: 6 },
-  subtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
-  right: { alignItems: 'flex-end', minWidth: 50, gap: 4 },
-  rightBottom: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 22 },
-  pinSlot: { opacity: 0.85 },
-  time: { fontSize: 12, color: colors.textMuted },
-  timeActive: { color: colors.primary, fontWeight: '600' },
+  middle: { flex: 1, marginHorizontal: spacing.md, justifyContent: 'center' },
+  title: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  previewRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
+  tick: { marginRight: 4 },
+  subtitle: { flex: 1, fontSize: 15, color: colors.textSecondary },
+  typing: {
+    fontSize: 15,
+    color: colors.primary,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  right: { alignItems: 'flex-end', minWidth: 56, gap: 8 },
+  rightBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 24,
+  },
+  time: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
+  timeActive: { color: colors.primary, fontWeight: '700' },
   badge: {
-    backgroundColor: colors.unreadBadge,
+    backgroundColor: colors.primary,
     borderRadius: radii.pill,
-    paddingHorizontal: 8,
-    minWidth: 22,
-    height: 22,
+    paddingHorizontal: 7,
+    minWidth: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeMuted: { backgroundColor: colors.textMuted },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  badgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });
 
 export default ChatListItem;

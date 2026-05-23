@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { colors } from '@/theme';
 
 interface IconProps {
@@ -55,5 +55,39 @@ export const ArchiveIcon: React.FC<IconProps> = ({ size = 14, color = colors.tex
 export const CheckIcon: React.FC<IconProps> = ({ size = 12, color = colors.tickSent }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24">
     <Path d="M5 12l5 5 9-11" stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+/** Double tick used for delivered / read message status. */
+export const DoubleCheckIcon: React.FC<IconProps> = ({ size = 14, color = colors.tickRead }) => (
+  <Svg width={size} height={size} viewBox="0 0 28 24">
+    <Path d="M2 12l5 5 9-11" stroke={color} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M11 17l1.5 1.5L22 7" stroke={color} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const SearchIcon: React.FC<IconProps> = ({ size = 22, color = colors.textPrimary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx={11} cy={11} r={7} stroke={color} strokeWidth={2} />
+    <Path d="M16.5 16.5L21 21" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+export const CameraIcon: React.FC<IconProps> = ({ size = 22, color = colors.textPrimary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinejoin="round"
+    />
+    <Circle cx={12} cy={13} r={3.4} stroke={color} strokeWidth={2} />
+  </Svg>
+);
+
+export const ComposeIcon: React.FC<IconProps> = ({ size = 24, color = '#fff' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 20h4L19 9l-4-4L4 16v4z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+    <Path d="M14 6l4 4" stroke={color} strokeWidth={2} strokeLinecap="round" />
   </Svg>
 );

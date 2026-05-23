@@ -13,6 +13,7 @@ export interface Palette {
 
   // Surfaces
   background: string;
+  screen: string; // tinted page background (chat list, etc.)
   surface: string;
   surfaceAlt: string;
   surfaceElevated: string;
@@ -61,6 +62,7 @@ const light: Palette = {
   accent: '#00C2A8',
 
   background: '#FFFFFF',
+  screen: '#EAEFF5',
   surface: '#F6F8FA',
   surfaceAlt: '#ECEFF1',
   surfaceElevated: '#FFFFFF',
@@ -103,6 +105,7 @@ const dark: Palette = {
   accent: '#00C2A8',
 
   background: '#0B141B',
+  screen: '#0B141B',
   surface: '#111B22',
   surfaceAlt: '#1A252D',
   surfaceElevated: '#1F2C35',
